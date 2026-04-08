@@ -1,0 +1,30 @@
+
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Projects</h1>
+
+<p class="muted">
+Un proyecto agrupa tareas, contexto y resultados.
+</p>
+
+<form method="post" action="/projects/create">
+    <input name="name" placeholder="Nuevo proyecto" required>
+    <button>Crear</button>
+</form>
+
+<hr>
+
+{% for p in projects %}
+<p>
+    <a href="/projects/{{p.id}}">{{p.name}}</a>
+    {% if current_project_id == p.id %}(current){% endif %}
+</p>
+
+<form method="post" action="/projects/{{p.id}}/set-current">
+    <button>Set current</button>
+</form>
+
+{% endfor %}
+
+{% endblock %}

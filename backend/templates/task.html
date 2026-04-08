@@ -1,0 +1,46 @@
+<h1>{{task.title}}</h1>
+
+<p class="muted">
+Esta es tu unidad de trabajo. Aquí defines, ejecutas y guardas resultados.
+</p>
+
+{% extends "base.html" %}
+{% block content %}
+
+<h1>{{task.title}}</h1>
+<p>{{task.goal}}</p>
+
+<h2>Briefing</h2>
+<form method="post" action="/tasks/{{task.id}}/generate-briefing">
+    <button>Preparar briefing para LLM</button>
+</form>
+
+{% if task.briefing %}
+<pre>{{task.briefing}}</pre>
+{% endif %}
+
+<hr>
+
+<h2>Runs</h2>
+<form method="post" action="/tasks/{{task.id}}/runs/create">
+    <input name="summary" placeholder="Run">
+    <button>Guardar</button>
+</form>
+
+{% for r in task.runs %}
+<p>{{r}}</p>
+{% endfor %}
+
+<hr>
+
+<h2>Assets</h2>
+<form method="post" action="/tasks/{{task.id}}/assets/create">
+    <input name="title" placeholder="Asset">
+    <button>Crear</button>
+</form>
+
+{% for a in task.assets %}
+<p>{{a}}</p>
+{% endfor %}
+
+{% endblock %}

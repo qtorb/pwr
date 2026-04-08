@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+
+  <h1>PWR</h1>
+  <p class="muted">Trabaja con LLMs de forma estructurada y reusable</p>
+
+  {% if not current_project %}
+
+  <div class="card hero">
+    <h2>Empieza aquí</h2>
+    <p>Crea tu primer proyecto para empezar a trabajar</p>
+    <a class="btn primary" href="/projects">Crear proyecto</a>
+  </div>
+
+  {% else %}
+
+  <!-- BLOQUE PRINCIPAL -->
+  <div class="card hero">
+    <h2>Proyecto actual: {{ current_project.name }}</h2>
+
+    <form method="post" action="/tasks/create">
+      <input name="title" placeholder="¿Qué quieres hacer?" required>
+      <input name="goal" placeholder="Objetivo (opcional)">
+      <button class="btn primary">Crear Task</button>
+    </form>
+  </div>
+
+  <!-- BLOQUES SECUNDARIOS -->
+  <div class="grid">
+
+    <div class="card">
+      <h3>Tasks</h3>
+      {% for t in tasks %}
+        <p><a href="/tasks/{{t.id}}">{{t.title}}</a></p>
+      {% else %}
+        <p class="muted">No hay tasks</p>
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <h3>Captures</h3>
+      <form method="post" action="/captures/create">
+        <textarea name="text" placeholder="Idea rápida"></textarea>
+        <button class="btn">Guardar</button>
+      </form>
+
+      {% for c in captures %}
+        <p class="small">{{c.text}}</p>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  {% endif %}
+
+</div>
+
+{% endblock %}

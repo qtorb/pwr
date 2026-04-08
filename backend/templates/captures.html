@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Captures</h1>
+
+<p class="muted">
+Captura ideas rápidas. Luego podrás convertirlas en tareas o activos.
+</p>
+
+
+<form method="post" action="/captures/create">
+    <textarea name="text" required></textarea>
+    <button>Guardar</button>
+</form>
+
+<hr>
+
+{% for c in captures %}
+<p>{{c.text}}</p>
+
+<form method="post" action="/captures/{{c.id}}/discard">
+    <button>Descartar</button>
+</form>
+
+{% endfor %}
+
+{% endblock %}

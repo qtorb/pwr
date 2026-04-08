@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>{{project.name}}</h1>
+
+<h2>Nueva Task</h2>
+<form method="post" action="/tasks/create">
+    <input type="hidden" name="project_id" value="{{project.id}}">
+    <input name="title" placeholder="Título" required>
+    <input name="goal" placeholder="Goal">
+    <button>Crear</button>
+</form>
+
+<hr>
+
+<h2>Tasks</h2>
+{% for t in tasks %}
+<p><a href="/tasks/{{t.id}}">{{t.title}}</a></p>
+{% endfor %}
+
+<h2>Captures</h2>
+{% for c in captures %}
+<p>{{c.text}}</p>
+{% endfor %}
+
+{% endblock %}
