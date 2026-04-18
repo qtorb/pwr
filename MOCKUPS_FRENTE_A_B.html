@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PWR — Mockups Frente A + B</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #f5f5f5;
+            color: #0f172a;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .mockup {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 40px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .mockup h1 {
+            font-size: 18px;
+            margin-bottom: 10px;
+            color: #374151;
+        }
+
+        .mockup p {
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 20px;
+        }
+
+        /* ==================== HOME HEADER ====================  */
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .header-logo {
+            font-size: 24px;
+            font-weight: 900;
+            color: #0f172a;
+            letter-spacing: -1px;
+            min-width: 60px;
+        }
+
+        .header-context {
+            flex: 1;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .header-cta {
+            padding: 10px 16px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .header-cta:hover {
+            background: #2563eb;
+        }
+
+        /* ==================== CARDS ====================  */
+
+        .card {
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 14px;
+            margin-bottom: 12px;
+            background: white;
+        }
+
+        .card-type {
+            font-size: 11px;
+            color: #6b7280;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #0f172a;
+        }
+
+        .card-preview {
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 6px;
+            font-style: italic;
+        }
+
+        .card-meta {
+            font-size: 11px;
+            color: #9ca3af;
+        }
+
+        .card-action {
+            text-align: right;
+            margin-top: 8px;
+        }
+
+        .icon-btn {
+            background: none;
+            border: none;
+            color: #6b7280;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 4px 8px;
+        }
+
+        .icon-btn:hover {
+            color: #0f172a;
+        }
+
+        /* ==================== INPUTS ====================  */
+
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        .input-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 4px;
+            color: #0f172a;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: inherit;
+        }
+
+        .input-large {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+        }
+
+        /* ==================== BUTTONS ====================  */
+
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+
+        .btn-primary:disabled {
+            background: #d1d5db;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: white;
+            color: #0f172a;
+            border: 1px solid #d1d5db;
+            width: 100%;
+        }
+
+        .btn-secondary:hover {
+            background: #f9fafb;
+        }
+
+        /* ==================== RECOMMENDATION ====================  */
+
+        .recommendation {
+            background: #f0f9ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            padding: 14px;
+            margin: 16px 0;
+        }
+
+        .recommendation h3 {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #0f172a;
+        }
+
+        .rec-grid {
+            display: grid;
+            grid-template-columns: 0.4fr 0.6fr;
+            gap: 12px;
+        }
+
+        .rec-item h4 {
+            font-size: 11px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 4px;
+        }
+
+        .rec-item p {
+            font-size: 12px;
+            color: #6b7280;
+            margin: 0;
+        }
+
+        .rec-model {
+            background: white;
+            border: 1px solid #dbeafe;
+            padding: 8px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 11px;
+            color: #0f172a;
+        }
+
+        .metadata {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #dbeafe;
+        }
+
+        .metadata-item {
+            font-size: 11px;
+            color: #6b7280;
+        }
+
+        /* ==================== SECTIONS ====================  */
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #0f172a;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .divider {
+            border-top: 1px solid #e5e7eb;
+            margin: 16px 0;
+        }
+
+        .expander {
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+
+        .expander-header {
+            padding: 12px;
+            background: #f9fafb;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            user-select: none;
+        }
+
+        .expander-header:hover {
+            background: #f3f4f6;
+        }
+
+        .expander-content {
+            padding: 12px;
+            border-top: 1px solid #e5e7eb;
+            display: none;
+        }
+
+        .expander.open .expander-content {
+            display: block;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .grid-3 {
+                grid-template-columns: 1fr;
+            }
+            .rec-grid {
+                grid-template-columns: 1fr;
+            }
+            .metadata {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 style="margin-bottom: 30px; font-size: 24px;">Mockups — FRENTE A + FRENTE B</h1>
+
+        <!-- ==================== MOCKUP 1: HOME ====================  -->
+        <div class="mockup">
+            <h1>📱 FRENTE A — HOME (Refinamiento Visual Final)</h1>
+            <p>Status: ✅ Implementado. Header robusto, densidad mejorada, único CTA azul primario visible.</p>
+
+            <!-- Header -->
+            <div class="header">
+                <div class="header-logo">PWR</div>
+                <div class="header-context">Portable Work Router</div>
+                <button class="header-cta">✨ Crear</button>
+            </div>
+
+            <!-- Continuar -->
+            <div style="margin-bottom: 20px;">
+                <div class="section-title">Continuar desde aquí</div>
+                <div class="card" style="border: 2px solid #3b82f6; padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div style="flex: 1;">
+                            <div class="card-title" style="font-size: 15px;">📌 Analizar datos de Q1 2026</div>
+                            <div class="card-meta">Análisis de Negocio · hace 2h</div>
+                            <div style="margin-top: 8px; font-size: 12px; color: #6b7280;">__Resumen ejecutivo de KPIs principales, análisis de tendencias y proyecciones...__</div>
+                            <div style="margin-top: 10px;">
+                                <span style="background-color:#ddd6fe; padding: 6px 12px; border-radius: 6px; font-size: 11px; color: #3730a3; font-weight: 600;">✅ Listo para pulir</span>
+                            </div>
+                        </div>
+                        <div style="text-align: right; padding-left: 12px;">
+                            <button class="icon-btn">→</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Últimos Activos -->
+            <div>
+                <div class="section-title">Últimos activos</div>
+                <div class="grid-3">
+                    <!-- Card 1 -->
+                    <div class="card">
+                        <div class="card-type">📊 Tabla</div>
+                        <div class="card-title">Plan Q2 2026</div>
+                        <div class="card-preview">_Cronograma de hitos, sprints, equipo asignado..._</div>
+                        <div class="card-meta">Planificación · hace 1d</div>
+                        <div class="card-action">
+                            <button class="icon-btn">↗</button>
+                        </div>
+                    </div>
+
+                    <!-- Card 2 -->
+                    <div class="card">
+                        <div class="card-type">✉️ Email</div>
+                        <div class="card-title">Mensaje a stakeholders</div>
+                        <div class="card-preview">_Resumen de cambios, impacto esperado, próximos pasos..._</div>
+                        <div class="card-meta">Comunicación · hace 3d</div>
+                        <div class="card-action">
+                            <button class="icon-btn">↗</button>
+                        </div>
+                    </div>
+
+                    <!-- Card 3 -->
+                    <div class="card">
+                        <div class="card-type">💻 Código</div>
+                        <div class="card-title">Función de filtrado</div>
+                        <div class="card-preview">_def filter_data(items, criteria): return [i for i..._</div>
+                        <div class="card-meta">Desarrollo · hace 5d</div>
+                        <div class="card-action">
+                            <button class="icon-btn">↗</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Proyectos -->
+            <div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <div class="section-title" style="margin: 0;">Proyectos</div>
+                    <button class="btn btn-secondary" style="width: auto; padding: 6px 12px; font-size: 12px;">➕ Nuevo</button>
+                </div>
+                <div style="font-size: 11px; color: #6b7280; margin-bottom: 12px;">Mostrando lo más relevante ahora • (4 / 8 en archivo)</div>
+                <div class="grid-3">
+                    <div class="card">
+                        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">📁 Validación</div>
+                        <div class="card-meta">6 tareas</div>
+                        <div style="text-align: right; margin-top: 8px;">
+                            <button class="icon-btn">↗</button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">📁 Análisis Q1</div>
+                        <div class="card-meta">3 tareas</div>
+                        <div style="text-align: right; margin-top: 8px;">
+                            <button class="icon-btn">↗</button>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">📁 Desarrollo</div>
+                        <div class="card-meta">12 tareas</div>
+                        <div style="text-align: right; margin-top: 8px;">
+                            <button class="icon-btn">↗</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== MOCKUP 2: OMNI-INPUT ====================  -->
+        <div class="mockup">
+            <h1>📝 FRENTE B — OMNI-INPUT (Creación Única)</h1>
+            <p>Status: ✅ Implementado. Input grande, recomendación inline VISIBLE, CTA única con modelo.</p>
+
+            <div>
+                <!-- Header con proyecto -->
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">📁 Validación</div>
+                    <div style="font-size: 12px; color: #6b7280;">¿Qué quieres crear?</div>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Input grande protagonista -->
+                <div class="input-group">
+                    <label class="input-label">Trabajo a realizar</label>
+                    <textarea class="input-field input-large" placeholder="Resume documento • Escribe email • Analiza datos..."></textarea>
+                </div>
+
+                <div class="input-group">
+                    <label class="input-label">Detalles (opcional)</label>
+                    <textarea class="input-field input-large" placeholder="Contexto, restricciones, requisitos específicos..."></textarea>
+                </div>
+
+                <!-- Contexto expandible -->
+                <div class="expander open" style="margin-bottom: 12px;">
+                    <div class="expander-header">📎 Información adicional</div>
+                    <div class="expander-content">
+                        <textarea class="input-field input-large" placeholder="Documentación, ejemplos, guías..." style="margin: 0;"></textarea>
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- RECOMENDACIÓN INLINE -->
+                <div class="recommendation">
+                    <h3>✨ PWR recomienda</h3>
+                    <div class="rec-grid">
+                        <div>
+                            <div class="rec-item">
+                                <h4>Modelo</h4>
+                                <div class="rec-model">Gemini 2.5 Flash Lite</div>
+                                <p style="margin-top: 4px;">Modo: ECO</p>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="rec-item">
+                                <h4>Motivo</h4>
+                                <p>Tarea clara y bien definida. Priorizamos rapidez y costo eficiente.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="metadata">
+                        <div class="metadata-item">⏱️ Tiempo: ~2–4s</div>
+                        <div class="metadata-item">💰 Costo: bajo</div>
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- CTAs: UNA primaria, UNA secundaria -->
+                <div style="display: grid; grid-template-columns: 0.65fr 0.35fr; gap: 12px; margin-bottom: 12px;">
+                    <button class="btn btn-primary">✨ Ejecutar con Gemini 2.5 Flash Lite</button>
+                    <button class="btn btn-secondary">Cambiar modelo</button>
+                </div>
+
+                <!-- Botón secundario: Volver -->
+                <button class="btn btn-secondary">← Volver</button>
+            </div>
+        </div>
+
+        <!-- ==================== KEY CHANGES ====================  -->
+        <div class="mockup">
+            <h1>🎯 Cambios Clave Implementados</h1>
+
+            <h2 style="font-size: 13px; font-weight: 600; margin-top: 16px; margin-bottom: 8px;">✅ FRENTE B — OMNI-INPUT</h2>
+            <ul style="font-size: 12px; color: #6b7280; margin-left: 20px; line-height: 1.6;">
+                <li><strong>Eliminado:</strong> Pantalla "Generar propuesta" completamente</li>
+                <li><strong>Agregado:</strong> Recomendación del Router INLINE en omni_input_view()</li>
+                <li><strong>Cambio:</strong> Botón "Generar propuesta" → "➕ Nueva tarea" (en project_view)</li>
+                <li><strong>Flujo:</strong> Home/Project → Omni-Input → Resultado (sin pausa intermedia)</li>
+                <li><strong>Visible siempre:</strong> Proyecto, Modelo, Motivo en la misma pantalla</li>
+            </ul>
+
+            <h2 style="font-size: 13px; font-weight: 600; margin-top: 16px; margin-bottom: 8px;">✅ FRENTE A — HOME</h2>
+            <ul style="font-size: 12px; color: #6b7280; margin-left: 20px; line-height: 1.6;">
+                <li><strong>Header:</strong> Wordmark PWR 24px 900-weight + "Portable Work Router" contexto</li>
+                <li><strong>CTA:</strong> "✨ Crear" como ÚNICO botón azul primario visible</li>
+                <li><strong>Tarjetas:</strong> Densidad mejorada (gap controlado, padding reducido)</li>
+                <li><strong>Tipo:</strong> Claro con font-weight:600, margin-bottom:4px</li>
+                <li><strong>Sin artefactos:</strong> Eliminados restos visuales innecesarios</li>
+            </ul>
+        </div>
+
+        <!-- ==================== VALIDATION ====================  -->
+        <div class="mockup">
+            <h1>✅ Validación Técnica</h1>
+
+            <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                <div style="font-size: 12px; color: #15803d; font-weight: 600;">✅ Sintaxis verificada</div>
+                <div style="font-size: 11px; color: #4ade80; margin-top: 4px;">python -m py_compile app.py → OK</div>
+            </div>
+
+            <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 12px; margin-bottom: 12px;">
+                <div style="font-size: 12px; color: #15803d; font-weight: 600;">✅ Routing limpio</div>
+                <div style="font-size: 11px; color: #4ade80; margin-top: 4px;">proposal_view() eliminada del main(). Flujo: new_task → result</div>
+            </div>
+
+            <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 12px;">
+                <div style="font-size: 12px; color: #15803d; font-weight: 600;">✅ Sin "Generar propuesta"</div>
+                <div style="font-size: 11px; color: #4ade80; margin-top: 4px;">Botón reemplazado en project_view. Omni-Input es UNA sola pantalla.</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,291 @@
+════════════════════════════════════════════════════════════════════════════════
+BLOQUE H: PERSISTENCIA VISIBLE — Resumen Visual
+════════════════════════════════════════════════════════════════════════════════
+
+OBJETIVO: "PWR deja de sentirse como herramienta de tareas aisladas
+           y pasa a sentirse como workspace con memoria útil"
+
+════════════════════════════════════════════════════════════════════════════════
+1. PROBLEMA QUE RESUELVE
+════════════════════════════════════════════════════════════════════════════════
+
+HOY:
+  User ejecuta tarea → ve resultado → ¿dónde quedó? → desconfianza
+  User vuelve después → ¿qué hice? → no hay historial visible
+  User ve proyecto → solo lista de tareas, sin "historia"
+
+SÍNTOMAS:
+  ❌ No siente que nada se guardó
+  ❌ No ve continuidad
+  ❌ No entiende dónde retomar
+  ❌ Project se siente como "lista", no "workspace"
+
+IMPACTO:
+  → PWR se siente temporal, no como tool real
+  → Usuario no confía en retomar trabajo
+  → Adopción baja (cada sesión es "nueva")
+
+════════════════════════════════════════════════════════════════════════════════
+2. QUÉ VE HOY VS QUÉ PROPONGO
+════════════════════════════════════════════════════════════════════════════════
+
+RESULTADO HOY:
+┌──────────────────────────────┐
+│ [Aquí está tu respuesta]     │
+│                              │
+│ [Copiar]  [Otra] [Proyecto] │
+│                              │
+│ → ¿Dónde quedó esto?         │
+└──────────────────────────────┘
+
+RESULTADO PROPUESTO:
+┌──────────────────────────────┐
+│ [Aquí está tu respuesta]     │
+│                              │
+│ 📌 Guardado automáticamente   │
+│    Proyecto: Mi primer proj   │
+│    Tarea: Resume doc...       │
+│                              │
+│ ✅ Copiar                    │
+│ 📂 Ver en proyecto           │
+│ 🔄 Reutilizar como contexto │
+│                              │
+│ → Claro: está guardado aquí  │
+└──────────────────────────────┘
+
+HOME HOY:
+┌──────────────────────────────┐
+│ Trabajo en progreso:         │
+│ [Grid 3 cols - tareas]       │
+│                              │
+│ Mis proyectos:               │
+│ [Grid 2 cols - proyectos]    │
+│                              │
+│ → ¿Qué hice hoy? No sé      │
+└──────────────────────────────┘
+
+HOME PROPUESTO:
+┌──────────────────────────────┐
+│ Hoy:                         │
+│ ✅ Resume documento          │
+│    (hace 10 min)             │
+│ ✅ Escribe email             │
+│    (hace 1 hora)             │
+│                              │
+│ Trabajo en progreso:         │
+│ 📌 Analiza gráfico           │
+│    (en Mi primer proyecto)   │
+│                              │
+│ Mis proyectos:               │
+│ 📁 Mi primer proyecto        │
+│    (3 tareas, 2 ejecutadas) │
+│                              │
+│ → Veo qué pasó hoy fácilmente│
+└──────────────────────────────┘
+
+PROYECTO HOY:
+┌──────────────────────────────┐
+│ Mi primer proyecto           │
+│                              │
+│ Tareas:                      │
+│ - Resume documento           │
+│ - Escribe email              │
+│ - Analiza gráfico            │
+│                              │
+│ → No sé cuál se ejecutó      │
+└──────────────────────────────┘
+
+PROYECTO PROPUESTO:
+┌──────────────────────────────┐
+│ Mi primer proyecto           │
+│ (3 tareas, 2 resultados)     │
+│                              │
+│ Ejecutadas:                  │
+│ ✅ Resume documento          │
+│    [Resultado disponible]    │
+│ ✅ Escribe email             │
+│    [Resultado disponible]    │
+│                              │
+│ Pendientes:                  │
+│ 📌 Analiza gráfico           │
+│                              │
+│ → Claro: historial visible   │
+└──────────────────────────────┘
+
+════════════════════════════════════════════════════════════════════════════════
+3. 5 CAMBIOS VISUALES CONCRETOS
+════════════════════════════════════════════════════════════════════════════════
+
+A) RESULTADO: Señal clara de guardado
+   HOY:   [Resultado] [Botones]
+   →      No hay señal de que se guardó
+
+   NUEVO: [Resultado]
+          📌 Guardado automáticamente
+          Proyecto: X, Tarea: Y
+          [CTAs conectados]
+   →      User siente "esto está seguro aquí"
+
+B) HOME: Sección "Hoy" muestra historial del día
+   HOY:   Grids genéricos (sin contexto temporal)
+   →      User no sabe qué es reciente
+
+   NUEVO: Sección "Hoy" arriba
+          ✅ Tarea A (hace 10 min)
+          ✅ Tarea B (hace 1 hora)
+          [Grid de trabajo en progreso]
+   →      User ve "historial del día" inmediatamente
+
+C) PROYECTO: Separa ejecutadas vs pendientes
+   HOY:   Lista plana de tareas
+   →      No sé qué se hizo
+
+   NUEVO: ✅ Ejecutadas [con resultados]
+          📌 Pendientes
+   →      Proyecto es "workspace con historia"
+
+D) RESULTADO: Opciones de reutilización claras
+   HOY:   [Copiar] [Otra] [Proyecto]
+   →      No está claro qué puedo hacer con esto
+
+   NUEVO: ✅ Copiar resultado
+          📂 Ver en proyecto
+          🔄 Reutilizar como contexto
+          🎯 Crear tarea basada en esto
+   →      Cada acción conecta con siguiente paso
+
+E) RESULTADO: Continuidad post-ejecución
+   HOY:   [Resultado] [Botones desconectados]
+   →      "¿Qué hago ahora?"
+
+   NUEVO: [Resultado]
+          Siguiente paso:
+          - Refinar en proyecto
+          - Usar en otra tarea
+          - Crear tarea relacionada
+   →      Flujo continua naturalmente
+
+════════════════════════════════════════════════════════════════════════════════
+4. ZONAS QUE CAMBIAN (Visuales solamente)
+════════════════════════════════════════════════════════════════════════════════
+
+Resultado (display_onboarding_result):
+  + Sección "Guardado automáticamente"
+  + Contexto visible (proyecto, tarea)
+  + CTAs reorganizados
+
+Home (home_view):
+  + Sección "Hoy" (historial)
+  + Badges de estado (✅ ejecutado, 📌 pendiente)
+  + Timestamps ("hace X minutos")
+
+Proyecto (project_view):
+  + Separación ejecutadas / pendientes
+  + Badges de resultado disponible
+  + Historial visible
+
+QUÉ NO CAMBIA:
+  ❌ Backend (save, execute, BD schema)
+  ❌ Router (decisiones eco/racing)
+  ❌ Auth/multiusuario
+  ❌ Onboarding flujo
+
+════════════════════════════════════════════════════════════════════════════════
+5. CÓMO SE CONECTA CON LO CONSTRUIDO
+════════════════════════════════════════════════════════════════════════════════
+
+ANTES (G1-G4):
+onboarding_view() → resultado → [fin]
+home_view()       → navega tareas/proyectos
+project_view()    → lista tareas
+
+DESPUÉS (+ H):
+onboarding_view() → resultado [GUARDADO VISIBLE] → Home [VE QUÉ PASÓ]
+home_view()       → muestra historial + navegación
+project_view()    → workspace con ejecutadas/pendientes
+
+FLUJO NO SE ROMPE:
+  ✅ Mismo entrada/salida
+  ✅ Solo información añadida
+  ✅ Home más útil
+  ✅ Proyecto es "workspace"
+
+════════════════════════════════════════════════════════════════════════════════
+6. VALIDACIÓN: ¿PWR se siente como workspace?
+════════════════════════════════════════════════════════════════════════════════
+
+Test 1: "¿Dónde quedó tu trabajo?"
+  ✅ ÉXITO: User señala resultado → "Aquí, guardado en proyecto X"
+  ❌ FALLO: "No sé, desapareció"
+
+Test 2: "¿Qué hiciste hoy?"
+  ✅ ÉXITO: User señala Home "Hoy" → "Resume (10 min), Escribe (1 hora)"
+  ❌ FALLO: "Tengo que buscar en grids"
+
+Test 3: "¿Puedes reutilizar esto?"
+  ✅ ÉXITO: "Puedo copiar, usar contexto, crear basada en esto"
+  ❌ FALLO: "Solo copiar el texto"
+
+Test 4: "¿Qué sigue?"
+  ✅ ÉXITO: "Puedo refinar, crear tarea relacionada, o ver proyecto"
+  ❌ FALLO: "No sé, quedé aquí"
+
+Test 5: "¿Cómo es este proyecto?"
+  ✅ ÉXITO: "2 tareas hechas, 1 pendiente. Veo resultados de hechas"
+  ❌ FALLO: "Solo lista, sin contexto"
+
+Test 6: "¿Vuelves a un resultado anterior?"
+  ✅ ÉXITO: "Lo veo en Home o en Proyecto. Clic y vuelvo"
+  ❌ FALLO: "No está, desapareció"
+
+MÉTRICA GLOBAL:
+  "¿Cómo describís PWR ahora?"
+  ✅ ÉXITO: "Espacio donde mi trabajo queda guardado"
+  ❌ FALLO: "Tool que ejecuta tareas que desaparecen"
+
+════════════════════════════════════════════════════════════════════════════════
+7. STATUS TECH
+════════════════════════════════════════════════════════════════════════════════
+
+Objetivo:    Persistencia VISIBLE (no solo técnica)
+Hecho:       G1-G4, Sidebar dinámico, persistencia técnica en BD
+En progreso: Este microplan
+
+NO implementar todavía:
+  ❌ Código
+  ❌ Backend changes
+  ❌ Auth/multiusuario
+
+Riesgos:     Bajo (cambios visuales)
+Complejidad: Baja (datos ya existen, solo mostrar diferente)
+
+SIGUIENTE:
+  1. Albert aprueba dirección
+  2. Si hay feedback → ajusta microplan
+  3. Cuando listo → abre plan de implementación (H1, H2, H3...)
+
+DECISIÓN NECESARIA:
+  ¿Apruebas persistencia visible como dirección H?
+  ¿Ajustes al microplan?
+  ¿Cuándo detallar implementación?
+
+════════════════════════════════════════════════════════════════════════════════
+SÍNTESIS
+════════════════════════════════════════════════════════════════════════════════
+
+BLOQUE H transforma PWR de "herramienta" a "workspace con memoria".
+
+Cambios visuales:
+  1. Resultado: "Guardado aquí" visible
+  2. Home: Historial del día
+  3. Proyecto: Ejecutadas vs pendientes
+  4. Resultado: Reutilización clara
+  5. Resultado: Continuidad hacia siguiente paso
+
+Impacto: User siente que su trabajo es PERSISTENTE y CONTINUO
+
+Complejidad: Baja (solo visuales)
+
+Status: 📋 Microplan LISTO para aprobación
+
+════════════════════════════════════════════════════════════════════════════════

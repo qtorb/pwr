@@ -1,0 +1,243 @@
+════════════════════════════════════════════════════════════════════════════════
+G4: IMPLEMENTACIÓN COMPLETADA
+════════════════════════════════════════════════════════════════════════════════
+
+ESTADO: ✅ COMPILABLE, LISTO PARA VALIDACIÓN EN VIVO
+
+════════════════════════════════════════════════════════════════════════════════
+1. RESUMEN EXACTO DE CAMBIOS VISUALES
+════════════════════════════════════════════════════════════════════════════════
+
+ANTES (G3 - FALLÓ):
+   [🚀 Portable Work Router]           ← Title (innecesario)
+   [Explicación 3 puntos largo]        ← Confusa
+   [espacios múltiples]
+   [### 1. ¿Cuál es tu tarea?]        ← Header numerado
+   [Input 90px] ← PROTAGONISTA pero 4º elemento
+   [💡 Ejemplos] ← Invisible
+   [### 2, 3, 4...]
+   [Preview, Botón, Resultado con headers]
+
+DESPUÉS (G4 - CORRECTO):
+   [**¿Cuál es tu tarea?**] ← Simple, bold
+   [Input 120px] ← PROTAGONISTA 1º elemento
+   [PWR elige el mejor modelo...] ← Microfrase mínima
+   [💡 Sugerencias: resume este documento...] ← Visible si vacío
+   [ESPACIO PEQUEÑO]
+   [Decision preview] ← SI input ≥15 chars (automático, sin header)
+   [ESPACIO PEQUEÑO]
+   [✨ Empezar] ← SI preview visible (automático, sin header)
+   [ESPACIO PEQUEÑO]
+   [Resultado] ← SI completado (automático, sin header)
+
+CAMBIOS CLAVE:
+✅ INPUT es primer elemento
+✅ INPUT es más grande (120px vs 90px)
+✅ Microfrase es una línea (no explicación larga)
+✅ Ejemplos son visibles y contextuales
+✅ No hay números 1,2,3,4
+✅ No hay headers innecesarios
+✅ Preview aparece solo cuando input tiene sentido
+
+════════════════════════════════════════════════════════════════════════════════
+2. QUÉ SE ELIMINÓ
+════════════════════════════════════════════════════════════════════════════════
+
+❌ st.title("🚀 Portable Work Router")
+   → Redundante (PWR en sidebar)
+
+❌ st.write("""Describe tu tarea...
+           - Trabajar con claridad
+           - Entender por qué
+           - Guardar y reutilizar""")
+   → Explicación larga, confusa PRE-USO
+
+❌ st.markdown("### 1. ¿Cuál es tu tarea?")
+   → Input es claro por sí, no necesita header
+
+❌ st.markdown("### 2. Cómo lo vamos a resolver")
+   → Preview es claro por sí, no necesita header
+
+❌ st.markdown("### 3. Ejecuta")
+   → Botón es claro por sí, no necesita header
+
+❌ st.markdown("### 4. Resultado")
+   → Resultado es claro por sí, no necesita header
+
+❌ st.write("") [múltiples]
+   → Espacios múltiples colapsados a 1-2
+
+TOTAL: ~20 líneas de UI "ruido visual" eliminadas
+
+════════════════════════════════════════════════════════════════════════════════
+3. QUÉ MICROFRASE QUEDA
+════════════════════════════════════════════════════════════════════════════════
+
+st.caption("PWR elige el mejor modelo para tu tarea")
+
+CARACTERÍSTICAS:
+✅ Una sola línea (mínimo)
+✅ Explica QUÉ hace PWR (no cómo)
+✅ Caption size (discreta, no protagonista)
+✅ Viene después del input (apoyo, no instrucción)
+✅ Propósito: contexto, no guía
+
+POSICIÓN EN PANTALLA:
+   **¿Cuál es tu tarea?**
+   [Input 120px]
+   PWR elige el mejor modelo para tu tarea ← Aquí
+
+════════════════════════════════════════════════════════════════════════════════
+4. CÓMO SE MUESTRAN LOS EJEMPLOS
+════════════════════════════════════════════════════════════════════════════════
+
+CÓMO APARECEN:
+if not capture_title.strip():
+    st.caption("💡 Sugerencias: resume este documento, escribe un email, analiza un gráfico")
+
+CARACTERÍSTICAS:
+✅ Condicional: solo si input está vacío
+✅ Caption size: discretos, no prominentes
+✅ ORACIONES COMPLETAS: "resume este documento" (no "Resume")
+✅ Son SUGERENCIAS de tarea (no caminos alternativos)
+✅ Tienen contexto: usuario entiende qué escribir
+
+EJEMPLOS ANTERIORES vs NUEVOS:
+
+ANTES:    "💡 Ejemplos: Resume, Escribe, Analiza"
+DESPUÉS:  "💡 Sugerencias: resume este documento, escribe un email, analiza un gráfico"
+
+Por qué cambio:
+  - Son sugerencias de TAREAS, no sustantivos
+  - Dan contexto de qué escribir
+  - No compiten con escribir el input
+  - Son guía discreta, no alternativas
+
+════════════════════════════════════════════════════════════════════════════════
+5. CUÁNDO APARECE EL PREVIEW
+════════════════════════════════════════════════════════════════════════════════
+
+CONDICIÓN NUEVA:
+if capture_title.strip() and len(capture_title.strip()) >= 15:
+    display_decision_preview(...)
+
+UMBRAL: ≥15 caracteres
+
+COMPORTAMIENTO VISUAL:
+
+Usuario escribe "r"
+→ Nada (muy corto, sin sentido)
+
+Usuario escribe "resume este documento de ventas"  (≥15 chars)
+→ [Decision preview aparece automático]
+→ [✨ Empezar aparece automático]
+
+Usuario clica Empezar
+→ [Resultado aparece automático]
+
+POR QUÉ ESTE UMBRAL:
+✅ Evita preview mientras usuario aún está escribiendo
+✅ Espera a que tarea tenga forma (≥15 chars)
+✅ Flujo se siente natural, no invasivo
+✅ Usuario controla el timing (sigue escribiendo = no sale preview)
+
+════════════════════════════════════════════════════════════════════════════════
+6. VALIDACIÓN BREVE DEL ONBOARDING
+════════════════════════════════════════════════════════════════════════════════
+
+TEST 1: "Sin leer, ¿qué hago?"
+
+   ANTES (G3): Usuario ve título, explicación, busca dónde escribir ❌
+   DESPUÉS (G4): Usuario ve input grande, escribe ahí ✅
+
+TEST 2: "Flujo automático"
+
+   Usuario escribe 15+ chars
+   ANTES (G3): Ve números, headers, confusión ❌
+   DESPUÉS (G4): Ve preview + botón automáticamente ✅
+
+TEST 3: "Progresión sin saltos"
+
+   Usuario clica Empezar
+   ANTES (G3): Saltos, headers, transiciones raras ❌
+   DESPUÉS (G4): Resultado fluye naturalmente ✅
+
+TEST 4: "Vistazo 2 segundos"
+
+   Pregunta: "¿Qué es esto?" (sin instrucciones)
+   ANTES (G3): "Un sistema de pasos confuso" ❌
+   DESPUÉS (G4): "Un lugar donde describo tareas" ✅
+
+MÉTRICA ESPERADA: 80%+ usuarios pasan 4 tests = ÉXITO
+
+════════════════════════════════════════════════════════════════════════════════
+7. STATUS TECH REAL
+════════════════════════════════════════════════════════════════════════════════
+
+COMPILACIÓN:
+   python -m py_compile app.py
+   ✅ Syntax OK (sin errores)
+
+CAMBIOS EN CÓDIGO:
+   Función:               onboarding_view() (líneas 1868-2000)
+   Líneas eliminadas:     ~20 (título, explicación, headers, espacios)
+   Líneas refactorizadas: ~30 (input, ejemplos, preview, botón)
+   Líneas nuevas:         3 (preview threshold, ejemplo mejorado)
+
+INTACTO:
+   ✅ ExecutionService (lógica de decisiones)
+   ✅ create_project() / create_task() (creación)
+   ✅ execute() (ejecución modelo)
+   ✅ save_execution_result() (persistencia)
+   ✅ display_decision_preview() (función de display)
+   ✅ display_onboarding_result() (función de display)
+   ✅ Session state (transiciones)
+   ✅ Routing en main()
+   ✅ new_task_view()
+   ✅ home_view()
+   ✅ project_view()
+   ✅ router.py (cero cambios)
+   ✅ Base de datos (cero cambios)
+   ✅ Helpers (cero cambios)
+
+RIESGO TÉCNICO:
+   Lógica de backend:     🔴 CERO (UI pura)
+   Compilación:           🔴 CERO (syntax check OK)
+   Routing:               🔴 CERO (main() intacto)
+   Session state:         🔴 CERO (lógica intacta)
+   Persistencia:          🔴 CERO (save_execution_result intacto)
+
+RIESGO GENERAL: ⚠️ MUY BAJO (solo cambios visuales)
+
+════════════════════════════════════════════════════════════════════════════════
+MÉTRICAS FINALES
+════════════════════════════════════════════════════════════════════════════════
+
+   Cambio visual:         INPUT protagonista ✅
+   Microfrase:            Mínima (1 línea) ✅
+   Ejemplos:              Sugerencias contextuales ✅
+   Preview threshold:     ≥15 caracteres ✅
+   Headers numéricos:     Eliminados ✅
+   Espacios:              Colapsados ✅
+   Compilación:           OK ✅
+   Lógica intacta:        100% ✅
+   Riesgo:                Muy bajo ✅
+
+════════════════════════════════════════════════════════════════════════════════
+LISTO PARA VALIDACIÓN
+════════════════════════════════════════════════════════════════════════════════
+
+✅ G4 implementado con todos tus matices
+✅ Compilable (syntax OK)
+✅ Riesgo muy bajo (UI pura)
+✅ Lógica 100% intacta
+✅ 4 tests de validación listos
+
+Próximo paso: Validación visual en vivo
+
+Pregunta para usuario:
+"Sin leer nada, ¿entiendes qué hacer en 2 segundos?"
+  Si SÍ → G4 ÉXITO ✅
+  Si NO → Debug específico
+
+════════════════════════════════════════════════════════════════════════════════

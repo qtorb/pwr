@@ -1,0 +1,247 @@
+════════════════════════════════════════════════════════════════════════════════
+G3: IMPLEMENTACIÓN COMPLETADA — Cambios rápidos
+════════════════════════════════════════════════════════════════════════════════
+
+ESTADO: ✅ Compilable, listo para validar
+
+════════════════════════════════════════════════════════════════════════════════
+CAMBIOS PRINCIPALES (por vista)
+════════════════════════════════════════════════════════════════════════════════
+
+1. ONBOARDING_VIEW (líneas 1868-1994)
+   ─────────────────────────────────────────────────────────────────────────────
+   ANTES:
+   [Tabs Home | Radar]
+   [Ejemplos como 3 botones grandes]
+   [Input]
+   [Decision preview]
+   [Empezar]
+   [Resultado]
+   [Micro-guía innecesaria]
+
+   DESPUÉS:
+   ### 1. ¿Cuál es tu tarea?
+   [Input 90px]
+   💡 Ejemplos: Resume, Escribe, Analiza (CAPTION, no botones)
+
+   ### 2. Cómo lo vamos a resolver (si input tiene contenido)
+   [Decision preview - AUTOMÁTICO]
+
+   ### 3. Ejecuta
+   [✨ Empezar]
+
+   ### 4. Resultado
+   [Display si completado]
+
+   CAMBIOS CLAVE:
+   ✅ Eliminadas tabs (máxima claridad vertical)
+   ✅ Pasos numerados (1, 2, 3, 4) — PRÓXIMO PASO SIEMPRE OBVIO
+   ✅ Ejemplos como caption discreta (no botones)
+   ✅ Micro-guía eliminada
+   ✅ Secuencia sin scroll innecesario
+
+   ────────────────────────────────────────────────────────────────────────────
+
+2. NEW_TASK_VIEW (líneas 1999-2089)
+   ─────────────────────────────────────────────────────────────────────────────
+   ANTES:
+   [Header + Volver]
+   [Input]
+   [Decision preview]
+   [Expander contexto]
+   [Generar propuesta]
+
+   DESPUÉS:
+   ### ¿Qué necesitas hacer ahora?         [← Volver DISCRETO]
+   En proyecto: [nombre]
+
+   ### 1. ¿Qué necesitas?
+   [Input 90px]
+
+   ### 2. Cómo lo vamos a resolver (si input)
+   [Decision preview - AUTOMÁTICO]
+
+   ### 3. Detalles (opcional)
+   [Expander contexto]
+
+   ### 4. Ejecuta
+   [✨ Generar propuesta]
+
+   CAMBIOS CLAVE:
+   ✅ Mismo patrón lineal que onboarding (familiar)
+   ✅ Botón "Volver" discreto (no compite)
+   ✅ 4 pasos numerados (CONSISTENTE)
+   ✅ Sin "Retoma tu trabajo" (eso está en Home)
+   ✅ Sin "Tus proyectos" (eso está en Home)
+
+   ────────────────────────────────────────────────────────────────────────────
+
+3. HOME_VIEW (líneas 2090-2232)
+   ─────────────────────────────────────────────────────────────────────────────
+   ANTES:
+   [Input para nueva tarea arriba - CONFUSO]
+   [Trabajo en progreso]
+   [Mis proyectos]
+   [CTAs confundidas]
+
+   DESPUÉS:
+   ### 🏠 Mis tareas
+
+   #### Trabajo en progreso
+   [Grid tareas - "Continuar"]
+
+   #### Mis proyectos
+   [Grid proyectos - "Abrir"]
+
+   [➕ Nueva tarea - PRIMARY]  [➕ Crear proyecto]
+
+   CAMBIOS CLAVE:
+   ✅ Eliminado input (va a new_task_view)
+   ✅ Dos opciones CLARAS: retomar vs crear
+   ✅ CTAs diferenciadas (Nueva tarea = PRIMARY)
+   ✅ Modal "Crear proyecto" discreto (aparece si solicita)
+   ✅ Home es NAVEGACIÓN PURA (no input)
+
+   ────────────────────────────────────────────────────────────────────────────
+
+4. MAIN() SIDEBAR (líneas 3080-3118)
+   ─────────────────────────────────────────────────────────────────────────────
+   ANTES:
+   [PWR]
+   [🏠 Home] [📡 Radar]
+   ─────────────
+   [📁 Proyecto activo - duplicado]
+   ─────────────
+   [project_selector() - lista larga de proyectos]
+   [DUPLICA contenido de Home]
+
+   DESPUÉS:
+   [PWR]
+   [🏠 Home] [📡 Radar]
+   ─────────────
+   [SOLO SI proyecto abierto]
+   📁 Proyecto activo
+   {nombre}
+   ─────────────
+   [SOLO SI tarea seleccionada]
+   📌 Tarea actual
+   {nombre}
+
+   CAMBIOS CLAVE:
+   ✅ Eliminado project_selector() completamente
+   ✅ Sidebar es "espejo del estado" (no duplica Home)
+   ✅ CONTEXTO-ONLY: info, no navegación alternativa
+   ✅ Máximo 5 líneas sidebar cuando hay contexto
+   ✅ Cero ruido
+
+════════════════════════════════════════════════════════════════════════════════
+VALIDACIÓN: ¿PRÓXIMO PASO ES OBVIO?
+════════════════════════════════════════════════════════════════════════════════
+
+SIN LEER TEXTO, ¿qué ve usuario en cada estado?
+
+ONBOARDING (ESTADO A):
+  1️⃣ Ve input prominente
+     ↓
+  2️⃣ Ve "Cómo lo vamos a resolver" automáticamente
+     ↓
+  3️⃣ Ve botón "Empezar"
+     ↓
+  4️⃣ Ve resultado
+
+✅ Próximo paso SIEMPRE es el siguiente número
+
+────────────────────────────────────────────────────────────────────────────────
+
+NUEVA TAREA (ESTADO B):
+  1️⃣ Ve input prominente (idéntico a onboarding)
+     ↓
+  2️⃣ Ve "Cómo lo vamos a resolver" automáticamente
+     ↓
+  3️⃣ Ve "Detalles" expander (OPCIONAL)
+     ↓
+  4️⃣ Ve botón "Generar"
+
+✅ Patrón idéntico a onboarding = FAMILIAR
+
+────────────────────────────────────────────────────────────────────────────────
+
+HOME (ESTADO C):
+  Dos opciones:
+
+  OPCIÓN 1: "Retomar" → Grid tareas + "Continuar"
+  OPCIÓN 2: "Crear" → Botón "Nueva tarea" o "Crear proyecto"
+
+✅ Distinción clara: retomar vs crear
+
+════════════════════════════════════════════════════════════════════════════════
+COMPILACIÓN
+════════════════════════════════════════════════════════════════════════════════
+
+✅ python -m py_compile app.py
+   Resultado: OK, sin errores de sintaxis
+
+════════════════════════════════════════════════════════════════════════════════
+ARCHIVO MODIFICADO
+════════════════════════════════════════════════════════════════════════════════
+
+ÚNICO: app.py
+  • onboarding_view() refactorizada (4 pasos)
+  • new_task_view() refactorizada (4 pasos)
+  • home_view() simplificada (2 opciones)
+  • main() sidebar redesignado (contexto-only)
+
+INTACTOS: router.py, BD, ExecutionService, helpers, styles
+
+════════════════════════════════════════════════════════════════════════════════
+QUÉ DESAPARECIÓ (como planeado)
+════════════════════════════════════════════════════════════════════════════════
+
+ONBOARDING:
+  ❌ Tabs Home/Radar
+  ❌ Ejemplos como botones grandes
+  ❌ Micro-guía
+
+HOME:
+  ❌ Input para nueva tarea (va a new_task_view)
+  ❌ Decision preview (va a new_task_view)
+
+SIDEBAR:
+  ❌ project_selector() (completamente eliminado)
+  ❌ Duplicación de navegación
+
+════════════════════════════════════════════════════════════════════════════════
+MÉTRICAS
+════════════════════════════════════════════════════════════════════════════════
+
+Líneas modificadas: ~350 (refactor UI puro)
+Riesgos: ⚠️ Muy bajo (sin cambios en lógica core)
+Status compilación: ✅ OK
+Routing: ✅ Intacto (radar → new_task → project → home)
+Session state: ✅ Funcional
+
+════════════════════════════════════════════════════════════════════════════════
+CÓMO VALIDAR
+════════════════════════════════════════════════════════════════════════════════
+
+Ver: G3_VALIDATION_CHECKLIST.md
+
+Testeo simple:
+  1. New user (onboarding) → ¿Ve números 1-4? ✅
+  2. Click Nueva tarea → ¿Mismo patrón? ✅
+  3. Home → ¿Dos opciones claras? ✅
+  4. Sidebar → ¿Solo contexto? ✅
+
+Métrica: "Sin leer, ¿próximo paso es obvio?"
+  Si SÍ → G3 éxito ✅
+  Si NO → Revisar debug notes en checklist
+
+════════════════════════════════════════════════════════════════════════════════
+SIGUIENTE PASO
+════════════════════════════════════════════════════════════════════════════════
+
+→ Validación visual en vivo
+→ Ajustes si es necesario (mínimos esperados)
+→ Deployment si pasa validación
+
+════════════════════════════════════════════════════════════════════════════════

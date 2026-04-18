@@ -1,0 +1,175 @@
+════════════════════════════════════════════════════════════════════════════════
+E0 IMPLEMENTATION SUMMARY - CONSOLIDACIÓN DE DATOS ESTRUCTURADOS
+════════════════════════════════════════════════════════════════════════════════
+
+ESTADO: ✅ COMPLETADO Y VALIDADO
+
+────────────────────────────────────────────────────────────────────────────────
+1. CAMBIOS EXACTOS APLICADOS
+────────────────────────────────────────────────────────────────────────────────
+
+CAMBIO 1: Refactor save_execution_result()
+├─ Archivo: app.py (líneas 558-590)
+├─ Parámetro nuevo: router_metrics: Optional[dict] = None
+├─ Acción: Serializa router_metrics a JSON y guarda en router_metrics_json
+├─ Backward compatible: Funciona sin parámetro (guarda {})
+└─ Estructura del dict:
+   {
+     "mode": "eco|racing",
+     "model": "gemini-2.5-flash-lite",
+     "provider": "gemini|mock",
+     "latency_ms": 1245,
+     "estimated_cost": 0.05,
+     "complexity_score": 0.35,
+     "status": "executed|preview|failed",
+     "reasoning_path": "Texto de decisión...",
+     "executed_at": "2026-04-17T18:32:49.126016"
+   }
+
+CAMBIO 2: Actualizar llamada save_execution_result() - home_view()
+├─ Archivo: app.py (línea ~2073)
+├─ Construye router_metrics dict de result.routing y result.metrics
+└─ Pasa router_metrics parámetro a save_execution_result()
+
+CAMBIO 3: Actualizar llamada save_execution_result() - project_view()
+├─ Archivo: app.py (línea ~2347, botón "Usar este resultado")
+├─ Construye improved_metrics dict de improved_trace
+└─ Pasa router_metrics parámetro a save_execution_result()
+
+CAMBIO 4: Fix ModelCatalog._load_from_db()
+├─ Archivo: router/model_catalog.py (líneas 105-124)
+├─ BUG: capabilities_json leído pero NO guardado en _catalog_rows
+├─ FIX:
+│  ├─ Descomenta: capabilities_json = row[5]
+│  ├─ Descomenta: context_window = row[6]
+│  └─ Agrega a _catalog_rows: capabilities_json, context_window
+└─ Resultado: get_capabilities() ahora encuentra datos en BD
+
+CAMBIO 5: Documentación ModelCatalog
+├─ Archivo: router/model_catalog.py (líneas 23-62)
+├─ Docstring con secciones:
+│  ├─ CAMPOS PÚBLICOS (para /radar): provider, model_name, estimated_cost_per_run, context_window, capabilities_json, status, is_internal
+│  ├─ CAMPOS INTERNOS (no exposibles): pricing_input/output_per_mtok, deprecated_at, mode (BRIDGE TEMPORAL)
+│  ├─ GARANTÍAS FUNCIONALES: How DecisionEngine, ExecutionService, MetadataBuilder use catalog
+│  └─ PRINCIPIO: "BD describe QUÉ existe, código implementa CÓMO ejecutar"
+└─ Prepara contexto para E1 (/radar)
+
+────────────────────────────────────────────────────────────────────────────────
+2. ARCHIVOS TOCADOS
+────────────────────────────────────────────────────────────────────────────────
+
+MODIFICADOS (Existing):
+├─ app.py
+│  ├─ save_execution_result() refactored
+│  ├─ home_view() call updated
+│  └─ project_view() call updated
+│
+└─ router/model_catalog.py
+   ├─ _load_from_db() bug fixed
+   └─ Comprehensive docstring added
+
+CREADOS (New):
+├─ test_e0_validation.py
+│  └─ 5 comprehensive validation tests (all passing)
+│
+└─ E0_IMPLEMENTATION_REPORT.md
+   └─ Full detailed report with before/after code
+
+────────────────────────────────────────────────────────────────────────────────
+3. VALIDACIÓN DE COMPATIBILIDAD
+────────────────────────────────────────────────────────────────────────────────
+
+✅ BACKWARD COMPATIBILITY
+   └─ save_execution_result() works without router_metrics parameter
+      Code calling without new param still functions (saves {} to router_metrics_json)
+
+✅ FALLBACK LAYERS
+   └─ ModelCatalog fallback to hardcoded MODE_REGISTRY if DB unavailable
+      No changes needed to DecisionEngine or ExecutionService
+
+✅ SCHEMA COMPATIBILITY
+   └─ router_metrics_json column already exists from Bloque D
+      No destructive DB migrations needed
+
+✅ INTERFACE STABILITY
+   └─ ExecutionResult, RoutingDecision, ExecutionMetrics unchanged
+      All router components use same interfaces as before
+
+✅ UI COMPATIBILITY
+   └─ router_summary (TEXT) still exists, UI reads it as before
+      router_metrics_json is additional, doesn't break existing code
+
+────────────────────────────────────────────────────────────────────────────────
+4. VALIDACIÓN DE router_metrics_json
+────────────────────────────────────────────────────────────────────────────────
+
+TEST 1: get_capabilities() reads from BD (not hardcoded)
+✅ PASS: Capabilities properly loaded from model_catalog table
+
+TEST 2: router_metrics_json serialization & parsing
+✅ PASS: JSON serialization works, data stored and retrieved correctly
+
+TEST 3: router_summary backward compatibility
+✅ PASS: TEXT field still functions, UI doesn't break
+
+TEST 4: executions_history schema
+✅ PASS: Table exists with correct 11 minimalista fields
+   (id, task_id, project_id, execution_status, mode, model, provider,
+    latency_ms, estimated_cost, executed_at, created_at)
+
+TEST 5: E2E Flow Integration
+✅ PASS: Full flow works (ExecutionResult → dict → JSON → BD → readable)
+
+VALIDATION RESULTS: 5 PASS, 0 FAIL ✅
+
+────────────────────────────────────────────────────────────────────────────────
+5. CONFIRMACIÓN: E0 LISTO PARA E1
+────────────────────────────────────────────────────────────────────────────────
+
+PREREQUISITOS COMPLETADOS PARA /radar ENDPOINT:
+
+✅ Datos Estructurados Disponibles
+   └─ router_metrics_json contiene: mode, model, provider, latency_ms,
+      estimated_cost, complexity_score, status, reasoning_path, executed_at
+
+✅ Catálogo Vivo Estable
+   └─ ModelCatalog._modes cargado de BD con fallback
+      ModelCatalog._catalog_rows contiene capabilities, context_window
+      Métodos públicos: get_mode_config(), get_model(), get_capabilities(),
+                        list_modes(), list_providers()
+
+✅ Documentación de Campos Públicos vs Internos
+   └─ PÚBLICOS (safe for /radar): provider, model_name, estimated_cost_per_run,
+                                   context_window, capabilities_json, status, is_internal
+      INTERNOS (not for /radar): pricing_input/output_per_mtok, deprecated_at,
+                                 mode (BRIDGE TEMPORAL)
+
+✅ Compatibilidad Garantizada
+   └─ router_summary (TEXT) still exists for UI/compat
+      save_execution_result() backward compatible
+      No interface changes in DecisionEngine, ExecutionService, MetadataBuilder
+
+✅ Schema Minimalista
+   └─ executions_history: 11 fields (not over-engineered)
+      model_catalog: 12 fields (already exists)
+
+────────────────────────────────────────────────────────────────────────────────
+MISMO COMPORTAMIENTO FUNCIONAL, NUEVA FUENTE DE VERDAD
+────────────────────────────────────────────────────────────────────────────────
+
+PRE-E0:
+  • router_metrics_json columna existía pero vacía
+  • get_capabilities() hardcoded, ignoraba BD
+  • router_summary solo string, no queryable como JSON
+
+POST-E0:
+  • router_metrics_json poblada con JSON estructurado en cada ejecución
+  • get_capabilities() lee capabilities_json vivo de BD
+  • router_summary + router_metrics_json = trazabilidad completa
+
+USUARIO VE: Exactamente lo mismo (mismo UI, mismo comportamiento)
+SISTEMA INTERNAMENTE: Datos estructurados para /radar
+
+════════════════════════════════════════════════════════════════════════════════
+E0 STATUS: ✅ CONSOLIDADO Y LISTO PARA E1 (/radar endpoint)
+════════════════════════════════════════════════════════════════════════════════

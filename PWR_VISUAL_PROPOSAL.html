@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PWR - Propuesta Visual B2B</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #FAFBFC;
+            color: #0F172A;
+            line-height: 1.5;
+        }
+
+        /* LAYOUT PRINCIPAL */
+        .app-container {
+            display: flex;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        /* HEADER REDUCIDO */
+        .header {
+            background: #FFFFFF;
+            border-bottom: 1px solid #E2E8F0;
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+        }
+
+        .header-project {
+            flex: 1;
+        }
+
+        .header-project-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .header-project-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #0F172A;
+            margin-top: 2px;
+        }
+
+        .header-close {
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            font-size: 12px;
+            color: #475569;
+            transition: all 0.2s;
+        }
+
+        .header-close:hover {
+            background: #F1F5F9;
+            border-color: #CBD5E1;
+        }
+
+        /* WORKSPACE */
+        .workspace {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            gap: 0;
+        }
+
+        /* SIDEBAR - AHORA MÁS INTEGRADO */
+        .sidebar {
+            width: 320px;
+            background: #FFFFFF;
+            border-right: 1px solid #E2E8F0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-top {
+            padding: 1rem;
+            border-bottom: 1px solid #F1F5F9;
+            flex-shrink: 0;
+        }
+
+        .project-context {
+            font-size: 11px;
+            color: #94A3B8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .context-item {
+            font-size: 12px;
+            color: #475569;
+            padding: 0.4rem 0;
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .context-badge {
+            background: transparent;
+            padding: 0;
+            border-radius: 0;
+            font-size: 12px;
+            color: #0F172A;
+            font-weight: 500;
+        }
+
+        .context-value {
+            font-size: 12px;
+            color: #94A3B8;
+            margin-left: auto;
+        }
+
+        /* COMMAND BAR */
+        .command-bar {
+            padding: 1rem;
+            border-bottom: 1px solid #E2E8F0;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%);
+        }
+
+        .command-bar-label {
+            font-size: 10px;
+            font-weight: 700;
+            color: #94A3B8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .command-input-wrapper {
+            position: relative;
+        }
+
+        .command-input {
+            width: 100%;
+            background: #FFFFFF;
+            border: 2px solid #E2E8F0;
+            border-radius: 8px;
+            padding: 0.75rem 0.75rem 0.75rem 2.5rem;
+            font-size: 13px;
+            color: #0F172A;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .command-input:focus {
+            outline: none;
+            border-color: #2563EB;
+            background: #FFFFFF;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .command-input::placeholder {
+            color: #94A3B8;
+            font-weight: 400;
+        }
+
+        .command-icon {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #2563EB;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        /* TASK LIST - AHORA PROTAGONISTA */
+        .task-list {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 0;
+        }
+
+        .task-list-header {
+            padding: 0.75rem 1rem;
+            font-size: 11px;
+            font-weight: 600;
+            color: #94A3B8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: #F8FAFC;
+            border-bottom: 1px solid #F1F5F9;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        .task-item {
+            padding: 0.75rem 0.75rem;
+            border-bottom: 1px solid #F1F5F9;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+            margin: 0 0.5rem;
+            border-radius: 0 6px 6px 0;
+        }
+
+        .task-item:hover {
+            background: #F8FAFC;
+        }
+
+        .task-item.active {
+            background: #EFF6FF;
+            border-left-color: #2563EB;
+        }
+
+        .task-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: #0F172A;
+            margin-bottom: 0.3rem;
+        }
+
+        .task-meta {
+            display: flex;
+            gap: 0.5rem;
+            font-size: 11px;
+            color: #94A3B8;
+        }
+
+        .task-meta-item {
+            background: #F1F5F9;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+
+        .task-empty {
+            padding: 2rem 1rem;
+            text-align: center;
+            color: #94A3B8;
+            font-size: 12px;
+        }
+
+        /* MAIN AREA */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: #FAFBFC;
+        }
+
+        /* ROUTER DECISION - PROMINENT */
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .router-panel {
+            background: #FFFFFF;
+            border-left: 4px solid #10B981;
+            border-radius: 10px;
+            padding: 1.75rem;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
+            border-top: 1px solid #F1F5F9;
+        }
+
+        .router-mode {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #F1F5F9;
+        }
+
+        .router-badge {
+            background: #10B981;
+            color: #FFFFFF;
+            padding: 0.4rem 0.9rem;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .router-descriptor {
+            font-size: 15px;
+            color: #0F172A;
+            font-weight: 600;
+        }
+
+        .router-reason {
+            margin-bottom: 1.25rem;
+        }
+
+        .router-reason-label {
+            font-size: 11px;
+            font-weight: 700;
+            color: #94A3B8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.6rem;
+        }
+
+        .router-reason-text {
+            font-size: 13px;
+            color: #1F2937;
+            line-height: 1.7;
+        }
+
+        .router-metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            padding: 1rem;
+            background: #F8FAFC;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+
+        .router-metric {
+            border-right: 1px solid #E2E8F0;
+        }
+
+        .router-metric:nth-child(2n) {
+            border-right: none;
+        }
+
+        .router-metric-label {
+            color: #94A3B8;
+            font-weight: 600;
+            margin-bottom: 0.2rem;
+        }
+
+        .router-metric-value {
+            color: #0F172A;
+            font-weight: 700;
+            font-size: 13px;
+            font-family: 'Monaco', 'Courier New', monospace;
+        }
+
+        .router-action {
+            margin-top: 1.25rem;
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .button {
+            padding: 0.65rem 1rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .button-primary {
+            background: #2563EB;
+            color: #FFFFFF;
+            flex: 0 1 auto;
+            min-width: 120px;
+        }
+
+        .button-primary:hover {
+            background: #1D4ED8;
+            box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+        }
+
+        .button-secondary {
+            background: transparent;
+            color: #2563EB;
+            border: 1.5px solid #DBEAFE;
+            flex: 1;
+        }
+
+        .button-secondary:hover {
+            background: #EFF6FF;
+            border-color: #BFDBFE;
+        }
+
+        /* RESULTADO - CUANDO VACÍO */
+        .resultado-empty {
+            background: #FFFFFF;
+            border-radius: 8px;
+            padding: 3rem 2rem;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 1rem;
+            opacity: 0.6;
+        }
+
+        .empty-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #0F172A;
+            margin-bottom: 0.5rem;
+        }
+
+        .empty-description {
+            font-size: 13px;
+            color: #64748B;
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .empty-steps {
+            font-size: 12px;
+            color: #94A3B8;
+            text-align: left;
+            display: inline-block;
+        }
+
+        .empty-step {
+            margin: 0.4rem 0;
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .step-number {
+            background: #F1F5F9;
+            color: #64748B;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            flex-shrink: 0;
+            font-size: 11px;
+        }
+
+        /* RESULTADO - CON CONTENIDO */
+        .resultado-panel {
+            background: #FFFFFF;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .resultado-header {
+            font-size: 13px;
+            font-weight: 700;
+            color: #64748B;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+        }
+
+        .resultado-content {
+            font-size: 13px;
+            color: #334155;
+            line-height: 1.8;
+            margin-bottom: 1.5rem;
+            flex: 1;
+            overflow-y: auto;
+            max-height: 400px;
+        }
+
+        .resultado-extract {
+            background: #F8FAFC;
+            border-left: 3px solid #8B5CF6;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1.5rem;
+            font-size: 12px;
+            font-style: italic;
+            color: #475569;
+            line-height: 1.7;
+        }
+
+        .resultado-actions {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 1024px) {
+            .router-metrics {
+                grid-template-columns: 1fr;
+            }
+
+            .router-metric {
+                border-right: none;
+                border-bottom: 1px solid #E2E8F0;
+            }
+
+            .router-metric:last-child {
+                border-bottom: none;
+            }
+        }
+
+        /* SCROLLBAR */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #CBD5E1;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94A3B8;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- HEADER REDUCIDO -->
+        <div class="header">
+            <div class="header-project">
+                <div class="header-project-name">Proyecto</div>
+                <div class="header-project-title">Portable Work Router</div>
+            </div>
+            <button class="header-close">Cerrar</button>
+        </div>
+
+        <!-- WORKSPACE -->
+        <div class="workspace">
+            <!-- SIDEBAR -->
+            <div class="sidebar">
+                <!-- CONTEXT BAR -->
+                <div class="sidebar-top">
+                    <div class="project-context">Estado del Proyecto</div>
+                    <div class="context-item">
+                        <span>📋</span>
+                        <span class="context-badge">Objetivo</span>
+                        <span class="context-value">Definido</span>
+                    </div>
+                    <div class="context-item">
+                        <span>📎</span>
+                        <span class="context-badge">Documentos</span>
+                        <span class="context-value">3 archivos</span>
+                    </div>
+                    <div class="context-item">
+                        <span>✓</span>
+                        <span class="context-badge">Reglas</span>
+                        <span class="context-value">Activas</span>
+                    </div>
+                </div>
+
+                <!-- COMMAND BAR -->
+                <div class="command-bar">
+                    <div class="command-bar-label">Capturar tarea</div>
+                    <div class="command-input-wrapper">
+                        <span class="command-icon">+</span>
+                        <input type="text" class="command-input" placeholder="Pensar, escribir, programar, revisar, decidir..." />
+                    </div>
+                </div>
+
+                <!-- TASK LIST -->
+                <div class="task-list">
+                    <div class="task-list-header">Tareas activas (3)</div>
+
+                    <div class="task-item active">
+                        <div class="task-title">Explicar algoritmo de búsqueda</div>
+                        <div class="task-meta">
+                            <span class="task-meta-item">Pensar</span>
+                            <span class="task-meta-item">ECO</span>
+                            <span style="color: #94A3B8; margin-left: auto;">hace 1h</span>
+                        </div>
+                    </div>
+
+                    <div class="task-item">
+                        <div class="task-title">Documentar endpoints API</div>
+                        <div class="task-meta">
+                            <span class="task-meta-item">Escribir</span>
+                            <span class="task-meta-item">ECO</span>
+                            <span style="color: #94A3B8; margin-left: auto;">ayer</span>
+                        </div>
+                    </div>
+
+                    <div class="task-item">
+                        <div class="task-title">Revisar PR #284 de auth</div>
+                        <div class="task-meta">
+                            <span class="task-meta-item">Revisar</span>
+                            <span class="task-meta-item">Sonnet</span>
+                            <span style="color: #94A3B8; margin-left: auto;">Lunes</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MAIN AREA -->
+            <div class="main">
+                <div class="main-content">
+                    <!-- ROUTER DECISION -->
+                    <div class="router-panel">
+                        <div class="router-mode">
+                            <div class="router-badge">ECO</div>
+                            <div class="router-descriptor">Respuesta rápida y precisa</div>
+                        </div>
+
+                        <div class="router-reason">
+                            <div class="router-reason-label">Recomendación</div>
+                            <div class="router-reason-text">
+                                Para esta tarea hemos elegido velocidad y eficiencia. La complejidad es media y el análisis requiere claridad estructurada. Este modo ofrece la mejor relación rendimiento-coste.
+                            </div>
+                        </div>
+
+                        <div class="router-metrics">
+                            <div class="router-metric">
+                                <div class="router-metric-label">Modelo</div>
+                                <div class="router-metric-value">gemini-2.5-flash-lite</div>
+                            </div>
+                            <div class="router-metric">
+                                <div class="router-metric-label">Tiempo estimado</div>
+                                <div class="router-metric-value">~500ms</div>
+                            </div>
+                            <div class="router-metric">
+                                <div class="router-metric-label">Coste estimado</div>
+                                <div class="router-metric-value">$0.04</div>
+                            </div>
+                            <div class="router-metric">
+                                <div class="router-metric-label">Proveedor</div>
+                                <div class="router-metric-value">Google AI</div>
+                            </div>
+                        </div>
+
+                        <div class="router-action">
+                            <button class="button button-primary">Ejecutar</button>
+                            <button class="button button-secondary">Análisis profundo</button>
+                        </div>
+                    </div>
+
+                    <!-- RESULTADO - STATE VACÍO CON GUIDANCE -->
+                    <div class="resultado-empty">
+                        <div class="empty-icon">📝</div>
+                        <div class="empty-title">Resultado pendiente</div>
+                        <div class="empty-description">
+                            Ejecuta el Router para ver el análisis y salida de la tarea.
+                        </div>
+                        <div class="empty-steps">
+                            <div class="empty-step">
+                                <div class="step-number">1</div>
+                                <div>Configura el tipo y contexto si lo necesitas</div>
+                            </div>
+                            <div class="empty-step">
+                                <div class="step-number">2</div>
+                                <div>Haz clic en "Ejecutar" arriba</div>
+                            </div>
+                            <div class="empty-step">
+                                <div class="step-number">3</div>
+                                <div>El resultado aparecerá aquí listo para editar</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- EJEMPLO CON RESULTADO LLENO -->
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid #E2E8F0;">
+
+    <div style="padding: 1rem; background: #F0F4F8; text-align: center; font-size: 12px; color: #64748B;">
+        ESTADO CON RESULTADO CARGADO (scroll para ver)
+    </div>
+
+    <div class="app-container">
+        <div class="header">
+            <div class="header-project">
+                <div class="header-project-name">Proyecto</div>
+                <div class="header-project-title">Portable Work Router</div>
+            </div>
+            <button class="header-close">Cerrar</button>
+        </div>
+
+        <div class="workspace">
+            <div class="sidebar">
+                <div class="sidebar-top">
+                    <div class="project-context">Estado del Proyecto</div>
+                    <div class="context-item">
+                        <span>📋</span>
+                        <span class="context-badge">Objetivo</span>
+                        <span class="context-value">Definido</span>
+                    </div>
+                    <div class="context-item">
+                        <span>📎</span>
+                        <span class="context-badge">Documentos</span>
+                        <span class="context-value">3 archivos</span>
+                    </div>
+                    <div class="context-item">
+                        <span>✓</span>
+                        <span class="context-badge">Reglas</span>
+                        <span class="context-value">Activas</span>
+                    </div>
+                </div>
+
+                <div class="command-bar">
+                    <div class="command-bar-label">Capturar tarea</div>
+                    <div class="command-input-wrapper">
+                        <span class="command-icon">+</span>
+                        <input type="text" class="command-input" placeholder="Pensar, escribir, programar, revisar, decidir..." />
+                    </div>
+                </div>
+
+                <div class="task-list">
+                    <div class="task-list-header">Tareas activas (3)</div>
+
+                    <div class="task-item active">
+                        <div class="task-title">Explicar algoritmo de búsqueda</div>
+                        <div class="task-meta">
+                            <span class="task-meta-item">Pensar</span>
+                            <span class="task-meta-item">ECO</span>
+                            <span style="color: #94A3B8; margin-left: auto;">hace 1h</span>
+                        </div>
+                    </div>
+
+                    <div class="task-item">
+                        <div class="task-title">Documentar endpoints API</div>
+                        <div class="task-meta">
+                            <span class="task-meta-item">Escribir</span>
+                            <span class="task-meta-item">ECO</span>
+                            <span style="color: #94A3B8; margin-left: auto;">ayer</span>
+                        </div>
+                    </div>
+
+                    <div class="task-item">
+                        <div class="task-title">Revisar PR #284 de auth</div>
+                        <div class="task-meta">
+                            <span class="task-meta-item">Revisar</span>
+                            <span class="task-meta-item">Sonnet</span>
+                            <span style="color: #94A3B8; margin-left: auto;">Lunes</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="main">
+                <div class="main-content">
+                    <div class="router-panel">
+                        <div class="router-mode">
+                            <div class="router-badge">ECO</div>
+                            <div class="router-descriptor">Respuesta rápida y precisa</div>
+                        </div>
+
+                        <div class="router-reason">
+                            <div class="router-reason-label">Recomendación</div>
+                            <div class="router-reason-text">
+                                Para esta tarea hemos elegido velocidad y eficiencia. La complejidad es media y el análisis requiere claridad estructurada. Este modo ofrece la mejor relación rendimiento-coste.
+                            </div>
+                        </div>
+
+                        <div class="router-metrics">
+                            <div class="router-metric">
+                                <div class="router-metric-label">Modelo</div>
+                                <div class="router-metric-value">gemini-2.5-flash-lite</div>
+                            </div>
+                            <div class="router-metric">
+                                <div class="router-metric-label">Tiempo estimado</div>
+                                <div class="router-metric-value">~500ms</div>
+                            </div>
+                            <div class="router-metric">
+                                <div class="router-metric-label">Coste estimado</div>
+                                <div class="router-metric-value">$0.04</div>
+                            </div>
+                            <div class="router-metric">
+                                <div class="router-metric-label">Proveedor</div>
+                                <div class="router-metric-value">Google AI</div>
+                            </div>
+                        </div>
+
+                        <div class="router-action">
+                            <button class="button button-primary">Ejecutar de nuevo</button>
+                            <button class="button button-secondary">Análisis profundo</button>
+                        </div>
+                    </div>
+
+                    <div class="resultado-panel">
+                        <div class="resultado-header">Resultado</div>
+                        <div class="resultado-content">
+                            <p><strong>Algoritmo de Búsqueda Binaria</strong></p>
+                            <p style="margin-top: 1rem;">La búsqueda binaria es un algoritmo que permite encontrar un elemento en un arreglo ordenado dividiéndolo recursivamente por la mitad. Su complejidad es O(log n), lo que la hace mucho más eficiente que búsqueda lineal para listas grandes.</p>
+                            <p style="margin-top: 1rem;"><strong>Pasos del algoritmo:</strong></p>
+                            <p style="margin-top: 0.5rem;">1. Comparar el elemento buscado con el elemento central del arreglo<br/>2. Si es igual, hemos terminado<br/>3. Si es menor, repetir en la mitad izquierda<br/>4. Si es mayor, repetir en la mitad derecha<br/>5. Continuar hasta encontrar el elemento o que no haya elementos para buscar</p>
+                            <p style="margin-top: 1rem;"><strong>Ventajas:</strong> Muy eficiente con grandes datasets. Complejidad logarítmica. Ideal para búsquedas frecuentes.</p>
+                        </div>
+
+                        <div class="resultado-extract">
+                            "La búsqueda binaria divide el arreglo ordenado por la mitad recursivamente hasta encontrar el elemento, logrando O(log n) de complejidad, siendo exponencialmente más rápida que búsqueda lineal para datasets grandes."
+                        </div>
+
+                        <div class="resultado-actions">
+                            <button class="button button-primary">Guardar</button>
+                            <button class="button button-primary">Crear activo</button>
+                            <button class="button button-secondary">Editar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

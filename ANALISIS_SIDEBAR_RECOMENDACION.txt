@@ -1,0 +1,233 @@
+════════════════════════════════════════════════════════════════════════════════
+ANÁLISIS: Sidebar vs Espacio Útil en Flujos — RECOMENDACIÓN
+════════════════════════════════════════════════════════════════════════════════
+
+OBSERVACIÓN CORRECTA: La sidebar roba espacio horizontal crítico en flujos
+
+════════════════════════════════════════════════════════════════════════════════
+1. CUÁNTO ESPACIO SE PIERDE HOY
+════════════════════════════════════════════════════════════════════════════════
+
+Desktop estándar: 1440px
+
+Distribución actual:
+  Sidebar:      360px (25%)
+  Main content: 1080px (75%)
+
+Impacto por estado:
+
+  ONBOARDING (nuevo usuario):
+    Input disponible: 1080px
+    Input óptimo: 1300px+
+    PÉRDIDA: 220px (17% de mejora potencial)
+    Sidebar aporta: 0% (usuario nuevo, sin proyecto)
+
+  NUEVA TAREA (con contexto):
+    Input disponible: 1080px
+    Input óptimo: 1300px+
+    PÉRDIDA: 220px
+    Sidebar aporta: 35% (proyecto, volver a home)
+
+  HOME (navegación):
+    Grids disponibles: 1080px
+    Grids óptimos: 1200px+
+    PÉRDIDA: 120px (menor crítica, es navegación)
+    Sidebar aporta: 70% (contexto, navegación)
+
+════════════════════════════════════════════════════════════════════════════════
+2. QUÉ GANAMOS SIN SIDEBAR EN FLUJOS
+════════════════════════════════════════════════════════════════════════════════
+
+LECTURA HORIZONTAL:
+  Hoy:    [Sidebar] [Input 75% viewport]
+  Ideal:  [Input 100% viewport con padding]
+
+  Ganancia: 17-25% más espacio horizontal
+
+LEGIBILIDAD:
+  Input 90px, 1080px wide:
+    - Placeholder text se corta
+    - Flujo se siente "apretado"
+    - Menos respacio visual
+    Vs.
+  Input 120px, 1300px wide:
+    - Todo legible en una línea
+    - Flujo respira
+    - Clara jerarquía visual
+
+ENFOQUE DEL USUARIO:
+  Hoy:    Ve 2 cosas en paralelo (sidebar contexto + input principal)
+  Ideal:  Ve 1 cosa clara (input, luego preview, luego resultado)
+
+BALANCE DE NAVEGACIÓN:
+  Hoy:    Sidebar siempre disponible (usuario tentado a navegar)
+  Ideal:  Navegación en header top (usuario enfocado en tarea)
+
+════════════════════════════════════════════════════════════════════════════════
+3. CÓMO RESOLVER NAVEGACIÓN SIN SIDEBAR EN FLUJOS
+════════════════════════════════════════════════════════════════════════════════
+
+OPCIÓN RECOMENDADA: Header mínimo arriba
+
+┌─────────────────────────────────────────────────┐
+│ 🏠 Home  │  📡 Radar  │  PWR                   │
+├─────────────────────────────────────────────────┤
+│                                                 │
+│  ¿Cuál es tu tarea?                            │
+│  [Input 100% viewport]                         │
+│                                                 │
+│  Ejemplos discretas...                         │
+│                                                 │
+│  [Preview si input ≥15 chars]                  │
+│  [Botón]                                        │
+│                                                 │
+│  [Resultado si completado]                     │
+│                                                 │
+└─────────────────────────────────────────────────┘
+
+NAVEGACIÓN:
+✅ Home button: usuario puede salir del flujo (pero estará en home)
+✅ Radar button: acceso a snapshot (contexto global)
+✅ PWR logo: orientación, "dónde estoy"
+
+CONTEXTO:
+- Usuario nuevo (onboarding): no necesita contexto (será creado)
+- Usuario con proyecto (new_task): contexto está en home (volvió de ahí)
+
+════════════════════════════════════════════════════════════════════════════════
+4. TRES OPCIONES EVALUADAS
+════════════════════════════════════════════════════════════════════════════════
+
+A) SIN SIDEBAR + HEADER TOP MÍNIMO (RECOMENDADO)
+
+   ✅ PROS:
+     - +25% espacio horizontal
+     - Input/preview/resultado al máximo ancho
+     - Navegación clara arriba
+     - Móvil-friendly (header colapsable)
+
+   ❌ CONTRAS:
+     - Header compite visualmente con contenido
+     - No hay contexto visible (proyecto/tarea)
+     - Cambio respecto a home (user nota transición)
+
+
+B) SIDEBAR COLAPSADA EN FLUJOS
+
+   ✅ PROS:
+     - +15-20% espacio (balance)
+     - Contexto disponible si expandes
+     - Transición suave (user puede colapsar/expandir)
+
+   ❌ CONTRAS:
+     - Todavía ocupa ~40px (ícono)
+     - Requiere clic para ver contexto
+     - Complejidad media
+
+
+C) SIN SIDEBAR + CONTEXTO EN CONTENT (BOTTOM CAPTIONS)
+
+   ✅ PROS:
+     - +25% espacio
+     - Contexto visible pero no invasivo
+
+   ❌ CONTRAS:
+     - Contexto "abajo" (flujo visual roto)
+     - User necesita scroll para verlo
+
+════════════════════════════════════════════════════════════════════════════════
+5. MI RECOMENDACIÓN CLARA
+════════════════════════════════════════════════════════════════════════════════
+
+YO QUITARÍA LA SIDEBAR EN:
+  ✅ onboarding
+  ✅ new_task
+  ✅ primer_resultado (después de ejecutar)
+
+Y LA MANTENDRÍA EN:
+  ✅ home
+  ✅ radar
+  ✅ project_view
+  ✅ navegación general
+
+POR ESTAS RAZONES:
+
+FLUJOS son para ESCRIBIR:
+  - Usuario nuevo (onboarding): necesita máximo espacio para input
+  - Usuario creando tarea: necesita máximo espacio para decisión
+  - Usuario viendo resultado: necesita máximo espacio para leer output
+  - Sidebar aporta 0-35% de valor en estos casos
+  - Sidebar ocupa 25% de espacio crítico
+
+NAVEGACIÓN es para EXPLORAR:
+  - Usuario en home: necesita grids amplios, contexto rápido
+  - Usuario explorando radar: necesita sidebar para contexto global
+  - Usuario en proyecto: necesita sidebar para navegación de tareas
+  - Sidebar aporta 70% de valor en estos casos
+  - Espacio no es crítica (grids son responsivos)
+
+TRANSICIÓN NATURAL:
+  - User entra → Home con sidebar (navegación clara)
+  - Click "Nueva tarea" → Sidebar desaparece, header top aparece
+    (sensación: "ahora me enfoco en escribir")
+  - Termina tarea → Home con sidebar reaparece
+    (sensación: "ahora exploro mis tareas")
+
+IMPACTO EN UX:
+  - Flujos respiran (máximo espacio, máximo enfoque)
+  - Navegación mantiene contexto (sidebar útil)
+  - Usuario entiende el cambio (sidebar "duerme" en flujos)
+  - Input es protagonista sin competencia
+
+════════════════════════════════════════════════════════════════════════════════
+6. IMPLEMENTACIÓN: COMPLEJIDAD
+════════════════════════════════════════════════════════════════════════════════
+
+NIVEL: 🔴 Medio-Alto
+
+CAMBIOS NECESARIOS:
+  - main() debe ser condicional (mostrar sidebar si no en flujo)
+  - onboarding_view() necesita header top
+  - new_task_view() necesita header top
+  - primer_resultado view necesita header top
+  - Routing debe ser aware de "flujo vs navegación"
+
+RIESGOS:
+  - Cambio en main() (eje de toda la app)
+  - Transición entre sidebar y no-sidebar (states)
+  - Mobile testing (header responde bien)
+
+BENEFICIO:
+  - Ganancia UX significativa (+25% espacio en flujos)
+  - Enfoque del usuario mejorado (escribir vs navegar)
+  - Layout más intuitivo (diferentes estados, diferentes layouts)
+
+════════════════════════════════════════════════════════════════════════════════
+SÍNTESIS FINAL
+════════════════════════════════════════════════════════════════════════════════
+
+YO QUITARÍA/MINIMIZARÍA LA SIDEBAR EN:
+  ✅ Onboarding (0% aporte, 25% espacio crítico)
+  ✅ Nueva tarea (35% aporte, 25% espacio crítico)
+
+Y LA MANTENDRÍA EN:
+  ✅ Home (70% aporte, espacio no crítico)
+  ✅ Radar (70% aporte, espacio no crítico)
+  ✅ Proyecto (70% aporte, espacio no crítico)
+
+RAZÓN CENTRAL:
+  Sidebar no solo es ruido visual: es pérdida de espacio horizontal
+  en estados donde cada pixel de ancho importa para la legibilidad
+  del flujo principal.
+
+  En flujos (escribir tarea), máximo espacio = mejor UX.
+  En navegación (explorar trabajo), sidebar = contexto útil.
+
+SOLUCIÓN RECOMENDADA:
+  Header mínimo arriba en flujos (3 botones: home, radar, PWR)
+  Sidebar sigue en navegación (contexto completo)
+
+  Resultado: Flujos limpios, navegación clara, user sabe cuándo está
+  en cada estado.
+
+════════════════════════════════════════════════════════════════════════════════

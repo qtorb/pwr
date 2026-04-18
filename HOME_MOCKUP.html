@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PWR Home - Mockup Visual</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #FAFBFC;
+            color: #0F172A;
+        }
+
+        .page-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* HEADER COMPACTO */
+        .header {
+            background: #FFFFFF;
+            border-bottom: 1px solid #F1F5F9;
+            padding: 1rem 1.5rem;
+        }
+
+        .header-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #0F172A;
+            margin-bottom: 0.25rem;
+        }
+
+        .header-subtitle {
+            font-size: 13px;
+            color: #64748B;
+        }
+
+        /* MAIN CONTENT */
+        .main-content {
+            flex: 1;
+            padding: 1.5rem;
+            max-width: 1000px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* BLOQUE 1: CONTINUAR TRABAJO RECIENTE */
+        .block-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #94A3B8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 1rem;
+        }
+
+        .recent-work-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            margin-bottom: 2rem;
+        }
+
+        .task-item {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            padding: 1.25rem;
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+            border-top: none;
+        }
+
+        .task-item:first-child {
+            border-radius: 10px 10px 0 0;
+        }
+
+        .task-item:last-child {
+            border-top: 1px solid #F1F5F9;
+            border-radius: 0 0 10px 10px;
+        }
+
+        .task-item.active {
+            background: #EFF6FF;
+        }
+
+        .task-content {
+            flex: 1;
+        }
+
+        .task-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #0F172A;
+            margin-bottom: 0.5rem;
+        }
+
+        .task-item.active .task-title {
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .task-meta {
+            font-size: 11px;
+            color: #94A3B8;
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .task-meta-badge {
+            background: #F1F5F9;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+
+        .task-button {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .task-item.active .task-button {
+            background: #2563EB;
+            color: #FFFFFF;
+        }
+
+        .task-item:not(.active) .task-button {
+            background: transparent;
+            color: #2563EB;
+            border: 1.5px solid #DBEAFE;
+        }
+
+        .task-item:not(.active) .task-button:hover {
+            background: #EFF6FF;
+            border-color: #BFDBFE;
+        }
+
+        .empty-state {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 10px;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .empty-icon {
+            font-size: 40px;
+            margin-bottom: 1rem;
+            opacity: 0.6;
+        }
+
+        .empty-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #0F172A;
+            margin-bottom: 0.5rem;
+        }
+
+        .empty-description {
+            font-size: 12px;
+            color: #64748B;
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+
+        .empty-link {
+            color: #2563EB;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 600;
+            border-bottom: 1px solid #2563EB;
+        }
+
+        .empty-link:hover {
+            color: #1D4ED8;
+        }
+
+        /* BLOQUE 2: CAPTURA RÁPIDA */
+        .capture-block {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .capture-input-wrapper {
+            position: relative;
+            margin-bottom: 0.75rem;
+        }
+
+        .capture-icon {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #2563EB;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .capture-input {
+            width: 100%;
+            background: #FFFFFF;
+            border: 2px solid #E2E8F0;
+            border-radius: 8px;
+            padding: 0.75rem 0.75rem 0.75rem 2.5rem;
+            font-size: 13px;
+            color: #0F172A;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .capture-input:focus {
+            outline: none;
+            border-color: #2563EB;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .capture-input::placeholder {
+            color: #94A3B8;
+        }
+
+        .capture-options {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 1rem;
+            font-size: 11px;
+        }
+
+        .capture-option {
+            color: #2563EB;
+            text-decoration: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .capture-option:hover {
+            color: #1D4ED8;
+            text-decoration: underline;
+        }
+
+        .capture-button {
+            background: #2563EB;
+            color: #FFFFFF;
+            border: none;
+            padding: 0.65rem 1rem;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.2s;
+        }
+
+        .capture-button:hover {
+            background: #1D4ED8;
+            box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+        }
+
+        .capture-button:disabled {
+            background: #CBD5E1;
+            cursor: not-allowed;
+        }
+
+        /* BLOQUE 3: PROYECTOS RECIENTES */
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .project-card {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 10px;
+            padding: 1.25rem;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .project-header {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .project-icon {
+            font-size: 18px;
+        }
+
+        .project-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #0F172A;
+        }
+
+        .project-tasks {
+            font-size: 12px;
+            color: #64748B;
+        }
+
+        .project-lastupdate {
+            font-size: 11px;
+            color: #94A3B8;
+        }
+
+        .project-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            margin-top: 0.5rem;
+        }
+
+        .project-button-open {
+            flex: 1;
+            background: #2563EB;
+            color: #FFFFFF;
+            border: none;
+            padding: 0.6rem 1rem;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .project-button-open:hover {
+            background: #1D4ED8;
+        }
+
+        .project-favorite {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s;
+            padding: 0.4rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .project-favorite:hover {
+            background: #F1F5F9;
+            border-radius: 6px;
+        }
+
+        .projects-link {
+            color: #2563EB;
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .projects-link:hover {
+            text-decoration: underline;
+        }
+
+        /* BLOQUE 4: CREAR PROYECTO */
+        .create-project-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 1rem;
+        }
+
+        .create-project-button {
+            background: transparent;
+            color: #2563EB;
+            border: 1.5px solid #DBEAFE;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .create-project-button:hover {
+            background: #EFF6FF;
+            border-color: #BFDBFE;
+        }
+
+        /* STATE TOGGLE */
+        .state-toggle {
+            position: fixed;
+            bottom: 1rem;
+            right: 1rem;
+            z-index: 1000;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .state-button {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            color: #475569;
+            transition: all 0.2s;
+        }
+
+        .state-button.active {
+            background: #2563EB;
+            color: #FFFFFF;
+            border-color: #2563EB;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                padding: 1rem;
+            }
+
+            .projects-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- ESTADO CON ACTIVIDAD RECIENTE -->
+    <div class="page-container" id="state-active">
+        <!-- HEADER -->
+        <div class="header">
+            <div class="header-title">Portable Work Router</div>
+            <div class="header-subtitle">Retoma tu trabajo, captura tareas, usa el mejor modelo</div>
+        </div>
+
+        <!-- MAIN CONTENT -->
+        <div class="main-content">
+            <!-- BLOQUE 1: CONTINUAR TRABAJO RECIENTE -->
+            <div class="block-title">Continuar Trabajo Reciente</div>
+            <div class="recent-work-container">
+                <!-- ITEM PRINCIPAL (ACTIVO) -->
+                <div class="task-item active">
+                    <div class="task-content">
+                        <div class="task-title">📋 Explicar algoritmo de búsqueda</div>
+                        <div class="task-meta">
+                            <span>Proyecto: PWR</span>
+                            <span class="task-meta-badge">Pensar</span>
+                            <span class="task-meta-badge">ECO</span>
+                            <span>Hace 1 hora</span>
+                        </div>
+                    </div>
+                    <button class="task-button">Continuar</button>
+                </div>
+
+                <!-- ITEMS SECUNDARIOS -->
+                <div class="task-item">
+                    <div class="task-content">
+                        <div class="task-title">📋 Documentar endpoints API</div>
+                        <div class="task-meta">
+                            <span>Proyecto: PWR</span>
+                            <span class="task-meta-badge">Escribir</span>
+                            <span class="task-meta-badge">ECO</span>
+                            <span>Ayer</span>
+                        </div>
+                    </div>
+                    <button class="task-button">Continuar</button>
+                </div>
+
+                <div class="task-item">
+                    <div class="task-content">
+                        <div class="task-title">📋 Revisar PR #284 de auth</div>
+                        <div class="task-meta">
+                            <span>Proyecto: PWR</span>
+                            <span class="task-meta-badge">Revisar</span>
+                            <span class="task-meta-badge">Sonnet</span>
+                            <span>Lunes</span>
+                        </div>
+                    </div>
+                    <button class="task-button">Continuar</button>
+                </div>
+            </div>
+
+            <!-- BLOQUE 2: CAPTURA RÁPIDA -->
+            <div class="block-title">Captura Rápida</div>
+            <div class="capture-block">
+                <div class="capture-input-wrapper">
+                    <span class="capture-icon">+</span>
+                    <input type="text" class="capture-input" placeholder="Pensar, escribir, programar, revisar, decidir..." />
+                </div>
+                <div class="capture-options">
+                    <a class="capture-option" href="#">⚙️ Opciones</a>
+                    <a class="capture-option" href="#">📎 Archivos</a>
+                    <a class="capture-option" href="#">🏢 Proyecto</a>
+                </div>
+                <button class="capture-button" disabled>Capturar</button>
+            </div>
+
+            <!-- BLOQUE 3: PROYECTOS RECIENTES -->
+            <div class="block-title">Proyectos Recientes</div>
+            <div class="projects-grid">
+                <div class="project-card">
+                    <div class="project-header">
+                        <span class="project-icon">📁</span>
+                        <span class="project-name">Portable Work Router</span>
+                    </div>
+                    <div class="project-tasks">3 tareas activas</div>
+                    <div class="project-lastupdate">Última actividad: hace 1 hora</div>
+                    <div class="project-actions">
+                        <button class="project-button-open">Abrir</button>
+                        <button class="project-favorite">⭐</button>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-header">
+                        <span class="project-icon">📁</span>
+                        <span class="project-name">RosmarOps</span>
+                    </div>
+                    <div class="project-tasks">5 tareas activas</div>
+                    <div class="project-lastupdate">Última actividad: ayer</div>
+                    <div class="project-actions">
+                        <button class="project-button-open">Abrir</button>
+                        <button class="project-favorite">⭐</button>
+                    </div>
+                </div>
+            </div>
+            <a href="#" class="projects-link">Ver todos →</a>
+
+            <!-- BLOQUE 4: CREAR PROYECTO -->
+            <div class="create-project-container">
+                <button class="create-project-button">+ Crear nuevo proyecto</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ESTADO VACÍO / PRIMER USO -->
+    <div class="page-container" id="state-empty" style="display: none;">
+        <!-- HEADER -->
+        <div class="header">
+            <div class="header-title">Portable Work Router</div>
+            <div class="header-subtitle">Retoma tu trabajo, captura tareas, usa el mejor modelo</div>
+        </div>
+
+        <!-- MAIN CONTENT -->
+        <div class="main-content">
+            <!-- BLOQUE 1: CONTINUAR TRABAJO RECIENTE - VACÍO -->
+            <div class="block-title">Continuar Trabajo Reciente</div>
+            <div class="empty-state" style="margin-bottom: 2rem;">
+                <div class="empty-icon">📋</div>
+                <div class="empty-title">Todavía no hay tareas ejecutadas</div>
+                <div class="empty-description">Comienza capturando una tarea para retomar el trabajo cuando regreses</div>
+                <a href="#" class="empty-link">Capturar primera tarea →</a>
+            </div>
+
+            <!-- BLOQUE 2: CAPTURA RÁPIDA -->
+            <div class="block-title">Captura Rápida</div>
+            <div class="capture-block">
+                <div class="capture-input-wrapper">
+                    <span class="capture-icon">+</span>
+                    <input type="text" class="capture-input" placeholder="Pensar, escribir, programar, revisar, decidir..." />
+                </div>
+                <div class="capture-options">
+                    <a class="capture-option" href="#">⚙️ Opciones</a>
+                    <a class="capture-option" href="#">📎 Archivos</a>
+                    <a class="capture-option" href="#">🏢 Proyecto</a>
+                </div>
+                <button class="capture-button" disabled>Capturar</button>
+            </div>
+
+            <!-- BLOQUE 3: PROYECTOS RECIENTES - VACÍO -->
+            <div class="block-title">Proyectos Recientes</div>
+            <div class="empty-state" style="margin-bottom: 2rem;">
+                <div class="empty-icon">📁</div>
+                <div class="empty-title">Todavía no hay proyectos</div>
+                <div class="empty-description">Crea tu primer proyecto para comenzar a organizar tu trabajo</div>
+                <a href="#" class="empty-link">Crear primer proyecto →</a>
+            </div>
+
+            <!-- BLOQUE 4: CREAR PROYECTO -->
+            <div class="create-project-container">
+                <button class="create-project-button">+ Crear nuevo proyecto</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- STATE TOGGLE -->
+    <div class="state-toggle">
+        <button class="state-button active" onclick="showState('active')">Con Actividad</button>
+        <button class="state-button" onclick="showState('empty')">Vacía</button>
+    </div>
+
+    <script>
+        function showState(state) {
+            document.getElementById('state-active').style.display = state === 'active' ? 'flex' : 'none';
+            document.getElementById('state-empty').style.display = state === 'empty' ? 'flex' : 'none';
+
+            document.querySelectorAll('.state-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+</html>

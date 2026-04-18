@@ -1,0 +1,357 @@
+════════════════════════════════════════════════════════════════════════════════
+G3: FIRST-TASK FLOW EXPLÍCITO — DIAGNÓSTICO + PROPUESTA
+════════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA
+Después de G2, estados están separados pero flujo principal sigue confuso.
+Usuario no sabe: ¿cuál es mi primer paso? ¿qué es lo siguiente?
+
+ROOT CAUSE: 7-8 acciones compitiendo al mismo nivel
+
+════════════════════════════════════════════════════════════════════════════════
+1. DIAGNÓSTICO: ACCIONES COMPITIENDO HOY
+════════════════════════════════════════════════════════════════════════════════
+
+EN ONBOARDING (A):
+  - [Resume] [Escribe] [Analiza]     ← Quick starts (opcionales)
+  - [Input]                          ← O tu propia
+  - [Decision preview]               ← Automático si escribo
+  - [✨ Empezar]                    ← CTA primario
+  - [Resultado + 3 CTAs]             ← Si ejecutó
+
+CONFUSIÓN: ¿Ejemplo O escribo? ¿"Empezar" ejecuta?
+
+EN NUEVA TAREA (B):
+  - [← Volver]                       ← Perdida arriba
+  - [Input]                          ← Describir
+  - [Decision preview]               ← Si escribo
+  - [Contexto opcional]              ← Expandible
+  - [✨ Generar]                    ← CTA primario
+
+CONFUSIÓN: ¿"Generar" vs "Empezar"? ¿Son iguales?
+
+EN HOME (C):
+  - [Sidebar izquierdo]              ← Proyectos + nav
+  - [Trabajo en progreso]            ← Retoma
+  - [Mis proyectos]                  ← Navega
+  - [➕ Nueva tarea]                 ← Crear
+  - [➕ Crear proyecto]              ← Crear proyecto
+
+CONFUSIÓN: ¿Retomo una tarea O clickeo "Nueva"? ¿Qué es lo normal?
+
+SIDEBAR:
+  - Duplica lo de Home (proyectos)
+  - Ocupa 20% del ancho
+  - Añade ruido, no claridad
+
+════════════════════════════════════════════════════════════════════════════════
+2. DIAGNÓSTICO: ACCIONES CON CLARITY SCORE
+════════════════════════════════════════════════════════════════════════════════
+
+ACCIÓN                          CLARITY    PROBLEMA
+────────────────────────────────────────────────────────────────────────────
+Describir tarea (Input)         🟡 70%     Compite con ejemplos
+Click ejemplo                   🔴 30%     ¿Por qué no solo escribir?
+Ver propuesta (preview)         🟡 70%     Parece auto (confuso)
+Empezar (A)                     🟡 60%     ¿Diferencia con "Generar"?
+Generar (B)                     🔴 40%     Nombre vago, ¿ejecuta?
+Continuar tarea                 🟡 70%     ¿Diferencia con "Nueva"?
+Nueva tarea                     🟡 70%     ¿Diferencia con describir?
+Crear proyecto                  ✅ 90%     Clear
+Radar                           🟡 70%     ¿Necesario en flujo?
+
+SÍNTESIS: 7-8 acciones, 3-4 haciendo casi lo mismo, nombres inconsistentes
+
+════════════════════════════════════════════════════════════════════════════════
+3. PROPUESTA: ÚNICO CTA PRIMARIO POR ESTADO
+════════════════════════════════════════════════════════════════════════════════
+
+ESTADO A (ONBOARDING):
+────────────────────────────────────────────────────────────────────────────
+ÚNICO FLUJO PRINCIPAL:
+
+  [1] ¿CUÁL ES TU TAREA?
+      [Input 90px]
+
+  [2] CÓMO LO VAMOS A RESOLVER
+      [Decision preview - automático]
+
+  [3] EJECUTA
+      [✨ Empezar] ← ÚNICO CTA primario
+
+  [4] RESULTADO
+      [Output + 3 CTAs secundarias]
+
+SECUNDARIAS (muy discretas):
+  - [Resume] [Escribe] [Analiza] → Quick starts (NO botones, sugestiones)
+  - [Otra tarea] → Iterar (solo después de resultado)
+
+DESAPARECE:
+  - Tabs Home/Radar → Radar es link discreta
+  - Micro-guía innecesaria
+
+────────────────────────────────────────────────────────────────────────────
+
+ESTADO B (NUEVA TAREA):
+────────────────────────────────────────────────────────────────────────────
+FLUJO LINEAL:
+
+  [← Volver] (discreto, esquina)
+
+  [1] ¿QUÉ NECESITAS?
+      [Input 90px]
+
+  [2] CÓMO LO VAMOS A RESOLVER
+      [Decision preview - automático]
+
+  [3] DETALLES (OPCIONAL)
+      [Contexto - expandible]
+
+  [4] EJECUTA
+      [✨ Generar] ← ÚNICO CTA primario
+
+SECUNDARIAS:
+  - [Copiar resultado] (solo si hay resultado)
+
+────────────────────────────────────────────────────────────────────────────
+
+ESTADO C (HOME):
+────────────────────────────────────────────────────────────────────────────
+DOS OPCIONES CLARAS (no competencia):
+
+  ¿QUÉ QUIERES HACER?
+
+  [OPCIÓN 1: Retomar trabajo]
+    [Grid: tareas recientes - "Continuar"]
+
+  [OPCIÓN 2: Crear algo nuevo]
+    [➕ Nueva tarea] ← CTA primario
+
+  [AVANZADO]
+    [➕ Crear proyecto] (discreto)
+
+DESAPARECE:
+  - Sidebar con proyectos (OR drásticamente simplificado)
+  - "Mis proyectos" como grid secundario
+  - Radar
+  - Confusión entre "retomar" y "crear"
+
+════════════════════════════════════════════════════════════════════════════════
+4. CONVERTIR PANTALLA EN FLUJO LINEAL (NO MODULAR)
+════════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA HOY: Pantalla tiene módulos compitiendo
+  [Título]
+  [Explicación]
+  [Ejemplos] [Input] [Preview] [Button]
+  [Resultado] [3 CTAs]
+
+→ Usuario: "¿Cuál es lo primero?"
+
+SOLUCIÓN: Flujo vertical, cada sección responde una pregunta
+
+PATRÓN STREAMLIT RECOMENDADO (Híbrido):
+
+  st.markdown("### 1. ¿Cuál es tu tarea?")
+  input = st.text_area("", placeholder="...", height=90)
+
+  if input.strip():
+      st.markdown("### 2. Cómo lo resolvemos")
+      decision = show_preview(input)
+
+      st.markdown("### 3. Ejecuta")
+      if st.button("✨ Empezar"):
+          st.markdown("### 4. Resultado")
+          result = execute(input)
+          show_result(result)
+
+VENTAJA: Vertical, pasos numerados, siguiente paso siempre visible
+
+════════════════════════════════════════════════════════════════════════════════
+5. PAPEL DEL MENÚ LATERAL IZQUIERDO
+════════════════════════════════════════════════════════════════════════════════
+
+SIDEBAR HOY:
+  ├─ 🏠 Home
+  ├─ 📡 Radar
+  ├─ [Divider]
+  ├─ 📁 Proyecto activo (si existe)
+  └─ [Lista proyectos]
+
+PROBLEMAS:
+  ✗ Duplica proyectos (están en Home también)
+  ✗ Ocupa 20% del ancho (real estate costoso)
+  ✗ Añade profundidad confusa ("proyecto activo" vs qué?)
+  ✗ User: ¿Sidebar O Home?
+
+3 OPCIONES EVALUADAS:
+
+OPCIÓN 1: ELIMINAR (Radical)
+  ✓ Máxima claridad
+  ✗ Pierde contexto de proyecto
+  ✗ User puede perder trace
+
+OPCIÓN 2: SIMPLIFICAR (Recomendado)
+  Sidebar mínimo:
+  ├─ 🏠 Home
+  ├─ 📡 Radar
+  └─ [IF proyecto abierto]
+     └─ 📁 Proyecto X (link a project_view)
+
+  ✓ Contexto cuando es útil, no cuando no
+  ✓ Sidebar es "espejo del estado"
+  ✓ Nunca compite con contenido
+  ✗ Lógica condicional + cambios
+
+OPCIÓN 3: ELIMINAR COMPLETAMENTE
+  ✓ Máximo espacio para contenido
+  ✓ Sin ruido
+  ✗ Pierde navegación a veces
+
+RECOMENDACIÓN: OPCIÓN 2
+Rationale:
+  - Home es navegación principal
+  - Sidebar solo refleja contexto (proyecto/tarea actual)
+  - Si user está en Home: [🏠 Home] [📡 Radar]
+  - Si abrió proyecto: [🏠 Home] [📡 Radar] [📁 Proyecto X]
+  - Si seleccionó tarea: [🏠 Home] [📡 Radar] [📌 Tarea X]
+
+════════════════════════════════════════════════════════════════════════════════
+6. QUÉ DESAPARECE O QUEDA SECUNDARIO
+════════════════════════════════════════════════════════════════════════════════
+
+EN ESTADO A (ONBOARDING):
+────────────────────────────────────────────────────────────────────────────
+DESAPARECE:
+  - Ejemplos como botones prominentes → Sugestiones discretas
+  - Tabs Home/Radar → Radar link abajo
+  - Micro-guía → Texto innecesario
+  - Múltiples CTAs compitiendo → Solo "Empezar"
+
+QUEDA SECUNDARIO:
+  - "Otra tarea rápida" → Después de resultado
+
+────────────────────────────────────────────────────────────────────────────
+
+EN ESTADO B (NUEVA TAREA):
+────────────────────────────────────────────────────────────────────────────
+DESAPARECE:
+  - Nada (ya está limpio)
+
+QUEDA SECUNDARIO:
+  - "← Volver" → Botón pequeño, discreto
+  - Radar → No aparece
+
+────────────────────────────────────────────────────────────────────────────
+
+EN ESTADO C (HOME):
+────────────────────────────────────────────────────────────────────────────
+DESAPARECE:
+  - Sidebar con lista proyectos (o drásticamente reducido)
+  - Radar
+  - "Crear primer proyecto" (duplicado)
+  - Confusión retoma/crear
+
+QUEDA SECUNDARIO:
+  - "Crear proyecto" → Dentro de "Avanzado" o expandible
+  - Grid "Mis proyectos" → Secundario a "Trabajo en progreso"
+
+════════════════════════════════════════════════════════════════════════════════
+7. VALIDACIÓN: ¿PRÓXIMO PASO INTUITIVO?
+════════════════════════════════════════════════════════════════════════════════
+
+TEST: "Sin instrucciones ni texto, ¿qué haces?"
+
+ESTADO A (ONBOARDING):
+  Observar:
+    - ¿Mira el input primero?
+    - ¿Entiende que "Empezar" ejecuta?
+    - ¿Sabe qué hacer después del resultado?
+
+  ÉXITO: "Escribo aquí... veo que dice... clico Empezar"
+  FALLO: "¿Qué es esto? ¿Los botones de arriba?"
+
+────────────────────────────────────────────────────────────────────────────
+
+ESTADO B (NUEVA TAREA):
+  Observar:
+    - ¿Ve input como acción 1?
+    - ¿Entiende qué es "Generar"?
+    - ¿Sabe si contexto es obligatorio?
+
+  ÉXITO: "Escribo, veo propuesta, genero"
+  FALLO: "¿Diferencia con la otra pantalla?"
+
+────────────────────────────────────────────────────────────────────────────
+
+ESTADO C (HOME):
+  Observar:
+    - ¿Ve claramente "Retomar" vs "Crear"?
+    - ¿Ignora sidebar naturalmente?
+    - ¿Siguiente acción es obvia?
+
+  ÉXITO: "Veo mis tareas, puedo retomar o hacer algo nuevo"
+  FALLO: "¿Dónde estoy? ¿Qué es el sidebar?"
+
+────────────────────────────────────────────────────────────────────────────
+
+MÉTRICA PRINCIPAL:
+  "Sin leer texto, ¿el siguiente paso es obvio?"
+
+  Si SÍ → G3 ganó
+  Si NO → Refinar
+
+════════════════════════════════════════════════════════════════════════════════
+8. PATRÓN STREAMLIT RECOMENDADO
+════════════════════════════════════════════════════════════════════════════════
+
+OPCIÓN A: Una sola columna
+  Pro: Muy lineal
+  Con: Responsive trickier en mobile
+
+OPCIÓN B: Pasos secuenciales (con contadores 1, 2, 3...)
+  Pro: Muy claro
+  Con: Headers repetitivos
+
+OPCIÓN C: Contenedores condicionales
+  Pro: Estructura clara, responsive
+  Con: Menos lineal
+
+RECOMENDACIÓN: HÍBRIDO B+C
+
+Estructura:
+  1. Sidebar contexto-only (mínimo, espejo del estado)
+  2. Main: Flujo vertical con numeración (1. Describe, 2. Propuesta, 3. Ejecuta, 4. Resultado)
+  3. Pasos aparecen secuencialmente (if/then)
+  4. Máximo espacio para contenido (80% viewport)
+
+RESULTADO: Flujo vertical lineal, sidebar minimalista, máxima claridad
+
+════════════════════════════════════════════════════════════════════════════════
+STATUS TECH REAL
+════════════════════════════════════════════════════════════════════════════════
+
+DIAGNÓSTICO:        ✅ 7-8 acciones compitiendo identificadas
+FLUJO PRINCIPAL:    ✅ 3-4 pasos máximo por estado
+CTA PRIMARIO:       ✅ Uno por estado (Empezar/Generar/Retoma|Crear)
+SIDEBAR:            ✅ Opción 2 recomendada (contexto-only)
+PATRÓN STREAMLIT:   ✅ Híbrido B+C definido
+VALIDACIÓN:         ✅ Método claro (observación, "próximo paso obvio?")
+IMPLEMENTACIÓN:     ⏳ Próximo: Microplan G3 detallado
+
+════════════════════════════════════════════════════════════════════════════════
+SIGUIENTE PASO
+════════════════════════════════════════════════════════════════════════════════
+
+G3 MICROPLAN:
+  1. Líneas exactas qué cambiar (sidebar, desapariciones)
+  2. Patrón Streamlit aplicado (1. 2. 3. 4. con if/then)
+  3. Qué se reorganiza en cada estado
+  4. Cómo validarías que próximo paso es obvio
+
+DECISIÓN QUE NECESITO:
+  ¿Apruebo este diagnóstico de G3?
+  ¿Vamos con Opción 2 del sidebar (contexto-only)?
+  ¿Procedemos a microplan G3?
+
+════════════════════════════════════════════════════════════════════════════════

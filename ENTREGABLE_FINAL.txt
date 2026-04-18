@@ -1,0 +1,121 @@
+═══════════════════════════════════════════════════════════════════════════════
+                    PWR — ENTREGABLE FINAL ESTABILIZACIÓN
+                           2026-04-18
+═══════════════════════════════════════════════════════════════════════════════
+
+DOCUMENTOS OBLIGATORIOS (Completados):
+────────────────────────────────────
+
+1. ✅ STATUS_TECH_REAL.md
+   • Estabilidad del flujo principal: ✅ VALIDADA
+   • URL pública: ✅ CONFIGURADA (sin deploy yet)
+   • Persistencia: ✅ FUNCIONAL (local), ⚠️ EFÍMERA (Railway)
+   • Estados: ✅ COHERENTES
+   • Omni-Input: ✅ STABLE (Phase 3)
+   • Home: ✅ CONGELADA (sin regressions)
+   • Riesgos abiertos: DOCUMENTADOS
+
+2. ✅ CHECKLIST DE RELEASE INTERNA (OK/NO OK)
+   Estabilidad Flujo Principal
+   • App compila: ✅ OK
+   • DB schema válido: ✅ OK
+   • 17 proyectos cargables: ✅ OK
+   • Assets=0: ✅ OK (normal, usuarios no guardaron)
+   • Execution_history=0: ✅ OK (feature no implementada)
+   
+   URL Pública
+   • Procfile: ✅ OK
+   • requirements.txt: ✅ OK
+   • .streamlit/config.toml: ✅ OK
+   • railway.json: ✅ OK
+   
+   Persistencia
+   • DB local: ✅ OK
+   • Railway: ⚠️ EFÍMERA (aceptado para test corto)
+   
+   Omni-Input
+   • Funciona: ✅ OK
+   • Latencia: ✅ OK (88ms)
+   • Recomendación inline: ✅ OK
+   
+   Home
+   • PWR visible: ✅ OK
+   • Estable: ✅ OK
+
+3. ✅ CONFIGURACIÓN DEPLOYMENT (Railway Ready)
+   • Procfile → Procfile (creado)
+   • requirements.txt → streamlit + google-genai (completo)
+   • .streamlit/config.toml → settings (creado)
+   • railway.json → descriptor (creado)
+   • .env.example → documentation (creado)
+
+4. ✅ DOCUMENTACIÓN TÉCNICA
+   • DEPLOYMENT_NOTES.md → Cómo deployar, limitaciones
+   • RELEASE_CHECKLIST.md → Go/no-go criteria
+   • STABILIZATION_README.md → Quick start local + Railway
+
+EVIDENCIA REAL (Pendiente — después de Railway deploy):
+────────────────────────────────────────────────────────
+
+Los 5 entregables de evidencia se generarán DESPUÉS de deployar a Railway:
+
+1. [ ] URL pública funcional (https://pwr-xxxxx.railway.app)
+2. [ ] Captura: Home cargando correctamente
+3. [ ] Captura: Omni-Input con recomendación inline
+4. [ ] Captura: Resultado de ejecución
+5. [ ] Confirmación: Datos persisten tras reload
+
+Status ACTUAL: PRE-DEPLOY (todo listo para ser deployado)
+
+RIESGOS ABIERTOS (Documentados y Aceptados):
+─────────────────────────────────────────────
+
+CRÍTICO:
+- Railway dyno ephemeral FS → Data lost on restart
+  Mitigación: Aceptado para test 3-5 días (típicamente no hay restart)
+  Fix real: PostgreSQL (post-test)
+
+- GEMINI_API_KEY no configurada
+  Mitigación: MockEcoProvider funciona sin key
+  Fix real: Configurar API key en Railway
+
+ALTO:
+- App no deployado aún (solo compilable localmente)
+  Mitigación: Procfile + requirements.txt listos
+  Fix real: Push to Railway y validar
+
+MEDIO:
+- Omni-Input timing puede variar en Railway
+  Mitigación: Phase 3 validó imperceptible (88ms)
+  Riesgo: Bajo
+
+═══════════════════════════════════════════════════════════════════════════════
+                              RESUMEN EJECUTIVO
+═══════════════════════════════════════════════════════════════════════════════
+
+ESTADO: ✅ LISTO PARA TEST INTERNO EN RAILWAY
+
+Qué está listo:
+✅ Código estable (0 crashes conocidos)
+✅ Database funcional (17 proyectos, 19 tareas)
+✅ Flujo principal validado (Home → Proyecto → Tarea → Ejecutar → Resultado)
+✅ Omni-Input validado (Phase 3: 88ms latencia imperceptible)
+✅ Deployment configurado (Procfile, requirements, config)
+✅ Documentación completa (STATUS, CHECKLIST, README)
+
+Qué se necesita AHORA:
+1. Configurar GEMINI_API_KEY en Railway (o usar mocks)
+2. Push a GitHub
+3. Conectar repo a Railway
+4. Esperar deployment
+5. Validar URL pública carga Home
+
+Tiempo estimado: 15-20 minutos
+
+Riesgo principal: SQLite en Railway es efímero
+Mitigación: Aceptado para test corto (3-5 días sin redeploy típicamente)
+Fix real: PostgreSQL después del test
+
+GATE ACTUAL: ✅ GO
+
+═══════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PWR — Header Final (3 Estados)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #fff;
+            color: #0f172a;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: #0f172a;
+        }
+        .subtitle {
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 32px;
+        }
+        .state-section {
+            margin-bottom: 48px;
+        }
+        .state-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #374151;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 8px;
+        }
+        .state-desc {
+            font-size: 11px;
+            color: #9ca3af;
+            margin-bottom: 12px;
+            margin-left: 12px;
+        }
+        .header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            padding: 20px;
+            background: #fafbfc;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+        .header-left {
+            flex: 1;
+        }
+        .header-logo {
+            font-size: 28px;
+            font-weight: 900;
+            color: #0f172a;
+            letter-spacing: -1px;
+            margin-bottom: 2px;
+        }
+        .header-subtitle {
+            font-size: 11px;
+            color: #6b7280;
+        }
+        .header-subtitle span {
+            color: #9ca3af;
+        }
+        .header-subtitle-dynamic {
+            color: #374151;
+            font-weight: 500;
+        }
+        .header-right {
+            flex-shrink: 0;
+            width: 25%;
+            padding-left: 12px;
+        }
+        .btn {
+            width: 100%;
+            padding: 10px 16px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background: #2563eb;
+        }
+        .divider {
+            border-top: 1px solid #e5e7eb;
+            margin: 24px 0;
+        }
+        .home-preview {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            padding: 16px;
+            font-size: 11px;
+            color: #6b7280;
+            height: 200px;
+            overflow: hidden;
+        }
+        .code-block {
+            background: #1f2937;
+            color: #e5e7eb;
+            padding: 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 10px;
+            margin-top: 8px;
+            overflow-x: auto;
+        }
+        .state-active {
+            border-left: 4px solid #10b981;
+        }
+        .state-generating {
+            border-left: 4px solid #f59e0b;
+        }
+        .state-empty {
+            border-left: 4px solid #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Header Final — 3 Estados Dinámicos</h1>
+        <p class="subtitle">Variante C con copy mejorado, CTA claro, y soporte para 3 estados del workspace</p>
+
+        <!-- ESTADO A: ACTIVO -->
+        <div class="state-section state-active">
+            <div class="state-title">Estado A — Workspace Activo</div>
+            <div class="state-desc">Cuando hay actividad reciente (últimos 7 días)</div>
+
+            <div class="header">
+                <div class="header-left">
+                    <div class="header-logo">PWR</div>
+                    <div class="header-subtitle">
+                        Workspace <span>•</span>
+                        <span class="header-subtitle-dynamic">3 activos listos para revisar</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <button class="btn">+ Nuevo activo</button>
+                </div>
+            </div>
+
+            <div style="margin-left: 12px;">
+                <div style="font-size: 11px; color: #6b7280; margin-bottom: 12px;">
+                    <strong>Copy dinámico:</strong><br>
+                    • 1 activo: "1 activo listo para revisar"<br>
+                    • 2-3 activos: "X activos listos para revisar"<br>
+                    • 4+: "X activos listos"
+                </div>
+
+                <div class="code-block">get_header_state() → ('active', '3 activos listos para revisar')</div>
+
+                <div class="home-preview">
+                    <div style="opacity: 0.5; font-size: 12px;">Home preview (no visible en esta demo)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ESTADO B: GENERANDO -->
+        <div class="state-section state-generating">
+            <div class="state-title">Estado B — Activo Generándose</div>
+            <div class="state-desc">Cuando hay tareas en estado 'preview' (generación en curso)</div>
+
+            <div class="header">
+                <div class="header-left">
+                    <div class="header-logo">PWR</div>
+                    <div class="header-subtitle">
+                        Workspace <span>•</span>
+                        <span class="header-subtitle-dynamic">1 activo generándose...</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <button class="btn">+ Nuevo activo</button>
+                </div>
+            </div>
+
+            <div style="margin-left: 12px;">
+                <div style="font-size: 11px; color: #6b7280; margin-bottom: 12px;">
+                    <strong>Caso de uso:</strong> Mientras PWR genera propuesta, el header muestra actividad en vivo
+                </div>
+
+                <div class="code-block">get_header_state() → ('generating', '1 activo generándose...')</div>
+
+                <div class="home-preview">
+                    <div style="opacity: 0.5; font-size: 12px;">Home preview (generación en curso)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ESTADO C: CERO -->
+        <div class="state-section state-empty">
+            <div class="state-title">Estado C — Workspace Vacío (Primer Uso)</div>
+            <div class="state-desc">Cuando no hay actividad reciente o es la primera vez</div>
+
+            <div class="header">
+                <div class="header-left">
+                    <div class="header-logo">PWR</div>
+                    <div class="header-subtitle">
+                        Workspace <span>•</span>
+                        <span class="header-subtitle-dynamic">empieza creando tu primer activo</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <button class="btn">+ Nuevo activo</button>
+                </div>
+            </div>
+
+            <div style="margin-left: 12px;">
+                <div style="font-size: 11px; color: #6b7280; margin-bottom: 12px;">
+                    <strong>Copy motivador (sin desmotivación):</strong><br>
+                    • No dice "0 resultados"<br>
+                    • No dice "sin actividad"<br>
+                    • Dice: Invitación a empezar
+                </div>
+
+                <div class="code-block">get_header_state() → ('empty', 'empieza creando tu primer activo')</div>
+
+                <div class="home-preview">
+                    <div style="opacity: 0.5; font-size: 12px;">Home preview (primer uso)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RESUMEN FINAL -->
+        <div style="margin-top: 48px; padding: 20px; background: #f0f9ff; border: 1px solid #bfdbfe; border-radius: 6px;">
+            <h2 style="font-size: 14px; margin-bottom: 12px; color: #0f172a;">✅ Header Final Cerrado</h2>
+
+            <div style="font-size: 11px; color: #6b7280; line-height: 1.8;">
+                <strong>Estructura:</strong><br>
+                └─ PWR (28px, 900 weight)<br>
+                └─ Workspace • [estado dinámico] (11px)<br>
+                └─ + Nuevo activo (CTA primario)<br>
+                <br>
+
+                <strong>Copy:</strong><br>
+                ✓ CTA: "+ Nuevo activo" (con anclaje mental)<br>
+                ✓ Estados claros y motivadores<br>
+                ✓ Sin jargon técnico<br>
+                ✓ Sin desmotivación (Estado C es invitación)<br>
+                <br>
+
+                <strong>Estados dinámicos:</strong><br>
+                A) Activo: "3 activos listos para revisar"<br>
+                B) Generando: "1 activo generándose..."<br>
+                C) Cero: "empieza creando tu primer activo"<br>
+                <br>
+
+                <strong>Cambios de código:</strong><br>
+                • get_header_state() → determina estado<br>
+                • render_home_header_variant_c() → renderiza header final<br>
+                • Variantes A y B eliminadas (cleanup)<br>
+                • Nada fuera del header fue tocado<br>
+                <br>
+
+                <strong>Sintaxis:</strong> ✅ Verificada
+            </div>
+        </div>
+    </div>
+</body>
+</html>

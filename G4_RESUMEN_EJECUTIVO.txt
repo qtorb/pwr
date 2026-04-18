@@ -1,0 +1,315 @@
+════════════════════════════════════════════════════════════════════════════════
+G4: DIAGNÓSTICO + MICROPLAN — Visual Hierarchy
+════════════════════════════════════════════════════════════════════════════════
+
+CONCLUSIÓN: G3 falló por jerarquía visual, no por lógica.
+
+════════════════════════════════════════════════════════════════════════════════
+1. DIAGNÓSTICO VISUAL (¿Por qué falló G3?)
+════════════════════════════════════════════════════════════════════════════════
+
+FLUJO HOY (G3 - FALLA):
+
+   🚀 Portable Work Router      ← TITLE (innecesario, está en sidebar)
+
+   Describe tu tarea y PWR...   ← EXPLICACIÓN 3 PUNTOS (requiere lectura)
+   - Trabajar con claridad
+   - Entender por qué
+   - Guardar y reutilizar
+
+   [espacio]
+
+   ### 1. ¿Cuál es tu tarea?    ← HEADER con número (confunde)
+   [Input 90px]                 ← PROTAGONISTA pero es 4º elemento
+
+   💡 Ejemplos: Resume...       ← INVISIBLE (caption pequeño)
+
+   [espacio]
+
+   ### 2. Cómo lo vamos...      ← CONDICIONAL, requiere procesar
+   [Decision preview]
+
+   [espacio]
+
+   ### 3. Ejecuta               ← CONDICIONAL
+   [✨ Empezar]
+
+   [espacio]
+
+   ### 4. Resultado             ← CONDICIONAL
+   [Display]
+
+PROBLEMA VISUAL DESGLOSADO:
+
+   ❌ Primer elemento: Title (PWR) → Redundante
+   ❌ Segundo elemento: Explicación → Abstracta, requiere lectura
+   ❌ Tercero: Espacios y números → Crean pasos visuales falsos
+   ❌ CUARTO: Input → Es lo importante pero llega tarde
+   ❌ Números 1,2,3,4 → Sugieren secuencia pero confunden
+   ❌ Ejemplos → Invisibles (caption)
+   ❌ Headers "### 2, 3, 4" → Innecesarios
+
+RESULTADO:
+   - Usuario ve TODO menos INPUT al inicio
+   - INPUT llega después de 3 capas de contenido
+   - Secuencia se EXPLICA (con números) pero no se SIENTE
+   - Requiere lectura + procesamiento cognitivo
+
+════════════════════════════════════════════════════════════════════════════════
+2. QÜÉS COMPITEN VISUALMENTE (¿Qué gana atención?)
+════════════════════════════════════════════════════════════════════════════════
+
+   ELEMENTO                      PESO VISUAL    PESO REAL
+
+   🚀 Title                          ALTO           CERO
+   Explicación 3 puntos              MEDIO          BAJO (confunde)
+   Números 1,2,3,4                   BAJO           NEGATIVO (rompen flujo)
+   Input 90px                        BAJO           CRÍTICO (debería ser ALTO)
+   Caption Ejemplos                  CASI NADA      MEDIA (pero no se ve)
+
+INVERSIÓN VISUAL ACTUAL:
+   Title (innecesario)        PESO 3/10
+   Explicación (confusa)      PESO 3/10
+   INPUT (importante)         PESO 1/10  ← INVERTIDO
+
+
+INVERSIÓN VISUAL CORRECTA:
+   INPUT (importante)         PESO 9/10  ← DEBE SER AQUÍ
+   Ejemplos (ayuda)           PESO 1/10
+   Todo lo demás              PESO 0/10
+
+════════════════════════════════════════════════════════════════════════════════
+3. PROPUESTA G4 (Nueva jerarquía)
+════════════════════════════════════════════════════════════════════════════════
+
+FLUJO NUEVO (G4 - SOLUCIÓN):
+
+   ¿Cuál es tu tarea?              ← COPIA SIMPLE, directa
+   [Input 120px]                   ← INPUT PROTAGONISTA (1º elemento)
+   Ejemplo: Resume • Escribe • Analiza  ← Visible, discreta
+
+
+   [SI TIENE INPUT] ↓
+
+   [Decision preview]              ← Sin header, automático
+
+   [✨ Empezar]                    ← PRIMARY button, obvio
+
+
+   [SI EJECUTADO] ↓
+
+   [Resultado]                     ← Sin header, automático
+
+CAMBIOS CLAVE:
+
+   ✅ INPUT es 1º (protagonista, 120px)
+   ✅ Ejemplos visibles (no invisibles)
+   ✅ Sin Title redundante
+   ✅ Sin explicación confusa
+   ✅ Sin números (1,2,3,4)
+   ✅ Sin headers innecesarios (### 2, 3, 4)
+   ✅ Sin espacios múltiples
+   ✅ Flujo por espaciamiento (automático)
+
+VALIDACIÓN: "Sin leer, ¿qué hago?"
+
+   HOY (G3):      "Leo título, explicación, busco..." ❌
+   NUEVO (G4):    "Hay input grande, escribo ahí" ✅
+
+════════════════════════════════════════════════════════════════════════════════
+4. QUÉ DESAPARECE (vs G3)
+════════════════════════════════════════════════════════════════════════════════
+
+   ❌ st.title("🚀 Portable Work Router")
+      → PWR ya en sidebar. Redundancia.
+
+   ❌ st.write("""Describe tu tarea...""") - 3 puntos
+      → Abstracta, requiere lectura. Ruido.
+
+   ❌ st.markdown("### 1. ¿Cuál es tu tarea?")
+      → Header innecesario (input es claro por sí).
+
+   ❌ st.write("") - múltiples espacios
+      → Crean pasos visuales falsos. Colapsar a 1-2.
+
+   ❌ st.caption("💡 Ejemplos...") invisible
+      → Reemplazar con ejemplos visibles en copy.
+
+   ❌ st.markdown("### 2. Cómo...")
+      → Header innecesario (decision preview es claro).
+
+   ❌ st.markdown("### 3. Ejecuta")
+      → Header innecesario (botón es claro).
+
+   ❌ st.markdown("### 4. Resultado")
+      → Header innecesario (resultado es claro).
+
+TOTAL: ~15 líneas innecesarias eliminadas.
+
+════════════════════════════════════════════════════════════════════════════════
+5. QUÉ CAMBIA (vs G3)
+════════════════════════════════════════════════════════════════════════════════
+
+   A. INPUT
+      ANTES: height=90, label_visibility="collapsed", sin label
+      DESPUÉS: height=120, label_visibility="visible", label="¿Cuál es tu tarea?"
+      → INPUT es claro, protagonista
+
+   B. EJEMPLOS
+      ANTES: st.caption("💡 Ejemplos...") - invisible si input vacío
+      DESPUÉS: st.caption(...) - SIEMPRE visible, mejor copy
+      → Guía visible pero discreta
+
+   C. DECISION PREVIEW
+      ANTES: st.markdown("### 2. ...") + display_decision_preview()
+      DESPUÉS: display_decision_preview() - sin header
+      → Automático, sin ruido
+
+   D. BOTÓN
+      ANTES: st.markdown("### 3. Ejecuta") + button
+      DESPUÉS: button - sin header
+      → Obvio por sí
+
+   E. RESULTADO
+      ANTES: st.markdown("### 4. Resultado") + display_onboarding_result()
+      DESPUÉS: display_onboarding_result() - sin header
+      → Automático, claro
+
+════════════════════════════════════════════════════════════════════════════════
+6. QUÉ QUEDA INTACTO
+════════════════════════════════════════════════════════════════════════════════
+
+   ✅ ExecutionService initialization
+   ✅ TaskInput creation
+   ✅ decision_engine.decide()
+   ✅ create_project() / create_task()
+   ✅ execute() logic
+   ✅ save_execution_result()
+   ✅ display_decision_preview() function (llamada igual)
+   ✅ display_onboarding_result() function (llamada igual)
+   ✅ Session state logic
+   ✅ Routing en main()
+   ✅ new_task_view()
+   ✅ home_view()
+   ✅ project_view()
+   ✅ router.py
+   ✅ Base de datos
+   ✅ Todas las otras funciones
+
+CAMBIOS: UI PURA. CERO RIESGO DE LÓGICA.
+
+════════════════════════════════════════════════════════════════════════════════
+7. CÓMO VALIDARÁS QUE FUNCIONA (4 Tests)
+════════════════════════════════════════════════════════════════════════════════
+
+   TEST 1: "Sin leer, ¿qué hago?"
+   → Usuario nuevo ve pantalla sin instrucciones
+   ✅ ÉXITO: "Hay un input grande, escribo ahí"
+   ❌ FALLO: "Sigo leyendo texto, busco dónde escribir"
+
+   TEST 2: "Flujo automático"
+   → Usuario escribe en input, ¿qué pasa?
+   ✅ ÉXITO: "Automáticamente veo qué pasaría + botón"
+   ❌ FALLO: "Nada, tengo que clicar algo, o veo headers"
+
+   TEST 3: "Progresión natural"
+   → Usuario clica botón, ¿se siente natural?
+   ✅ ÉXITO: "Clicar → resultado automático, flujo obvio"
+   ❌ FALLO: "Saltos, loading confuso, transición rara"
+
+   TEST 4: "Vistazo de 2 segundos"
+   → Pregunta: "¿Qué es esto?" (sin instrucciones)
+   ✅ ÉXITO (80%+): "Un lugar para describir tareas"
+   ❌ FALLO: "Un sistema de pasos", vaguedad, confusión
+
+MÉTRICA DE ÉXITO: 80%+ usuarios pasan 4 tests.
+
+════════════════════════════════════════════════════════════════════════════════
+8. ARCHIVOS A TOCAR
+════════════════════════════════════════════════════════════════════════════════
+
+   ÚNICO: app.py
+   - Función: onboarding_view() (líneas 1868-2043)
+   - Cambios: ~40 líneas (eliminar + reorganizar)
+
+   NO TOCAR: Todo lo demás
+   - router.py, BD schema, ExecutionService, helpers
+   - new_task_view(), home_view(), project_view()
+   - Styles, sidebar, routing
+
+════════════════════════════════════════════════════════════════════════════════
+9. PATRÓN STREAMLIT QUE USARÁS
+════════════════════════════════════════════════════════════════════════════════
+
+   # PASO 1: SIEMPRE visible
+   st.text_area("¿Cuál es tu tarea?", height=120, ...)
+   st.caption("Ejemplo: Resume • Escribe • Analiza")
+
+   # PASO 2: Si input tiene contenido
+   if capture_title.strip():
+       display_decision_preview(...)
+
+       # PASO 3: Botón también condicional
+       if st.button("✨ Empezar", ...):
+           # Ejecutar lógica
+           st.session_state["onboard_result_ready"] = True
+           st.rerun()
+
+   # PASO 4: Si completado
+   if st.session_state.get("onboard_result_ready"):
+       display_onboarding_result(...)
+
+════════════════════════════════════════════════════════════════════════════════
+10. RIESGOS Y PROBABILIDADES
+════════════════════════════════════════════════════════════════════════════════
+
+   RIESGO                                 PROBABILIDAD    MITIGACIÓN
+
+   Eliminar código crítico                🔴 Muy baja    Elimino UI pura
+   Romper layout con height 120           🔴 Muy baja    Streamlit es responsivo
+   display_decision_preview() falla       🔴 Muy baja    Function es agnóstica
+   Session state corruption               🔴 Muy baja    Lógica NO CAMBIA
+   Routing rompe                          🔴 Muy baja    main() NO CAMBIA
+
+RIESGO GENERAL: ⚠️ MUY BAJO (UI pura, 0 lógica de negocio)
+
+════════════════════════════════════════════════════════════════════════════════
+11. STATUS TÉCNICO REAL
+════════════════════════════════════════════════════════════════════════════════
+
+   COMPONENTE                          ESTADO
+
+   Análisis completado                 ✅
+   Diagnóstico visual claro             ✅
+   Microplan especificado               ✅
+   Riesgos evaluados                    ✅
+
+   Código a modificar                  🔴 Pendiente aprobación
+   Compilación esperada                ✅ Alta confianza
+   Validación esperada                 🟡 Usuarios reales
+
+   Backend afectado                    ❌ NO
+   Router afectado                     ❌ NO
+   Base de datos afectada              ❌ NO
+   Persistencia afectada               ❌ NO
+   Radar afectado                      ❌ NO
+
+════════════════════════════════════════════════════════════════════════════════
+SÍNTESIS
+════════════════════════════════════════════════════════════════════════════════
+
+PROBLEMA:    INPUT no es visualmente protagonista
+SOLUCIÓN:    Jerarquía invertida: INPUT 1º, todo lo demás apoyo
+CAMBIOS:     ~40 líneas UI pura (eliminar + reorganizar)
+RIESGO:      Muy bajo
+VALIDACIÓN:  4 tests visuales (80%+ users entienden)
+
+PRÓXIMO PASO: Aprobación para implementar G4
+
+════════════════════════════════════════════════════════════════════════════════
+
+Ver documentos completos:
+- G4_DIAGNOSTICO_JERARQUIA_VISUAL.md (análisis detallado)
+- G4_MICROPLAN_COMPOSICION_ONBOARDING.md (especificaciones)
+
+════════════════════════════════════════════════════════════════════════════════
