@@ -55,7 +55,16 @@ def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition_
 
 
 def init_db() -> None:
-    ensure_dirs()
+    # Defensive: ensure directories exist with recursive creation
+    try:
+        ensure_dirs()
+    except Exception as e:
+        # Fallback: force creation even if ensure_dirs fails
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        if str(e).strip():  # Only log if there's actual error info
+            print(f"[WARN] ensure_dirs raised: {e}, but mkdir fallback succeeded")
+
     with get_conn() as conn:
         conn.execute(
             """
@@ -3145,7 +3154,24 @@ def radar_view():
 
 def main():
     st.set_page_config(page_title=APP_TITLE, layout="wide")
-    init_db()
+
+    # ===== Railway Persistence Warning =====
+    import os
+    # Detect Railway environment by presence of PORT env variable (Railway-specific)
+    if os.environ.get("PORT"):  # Railway sets PORT env var
+        st.warning(
+            "⚠️ **Entorno de prueba en Railway.** La persistencia local con SQLite puede ser efímera. "
+            "Válido para test corto de UX, no para uso productivo.",
+            icon="🔧"
+        )
+
+    # ===== Initialize Database (with defensive error handling) =====
+    try:
+        init_db()
+    except Exception as e:
+        st.error(f"❌ Startup error: Database initialization failed: {str(e)}")
+        st.stop()
+
     inject_css()
 
     with st.sidebar:
