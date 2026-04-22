@@ -51,9 +51,8 @@ class GeminiProvider(BaseProvider):
                 "Instala con: pip install google-genai"
             )
 
-        # Configurar cliente con API key
-        self.genai.configure(api_key=self.api_key)
-        self.client = self.genai.Client()
+        # Crear cliente con API key
+        self.client = self.genai.Client(api_key=self.api_key)
 
         # Validar que el cliente funciona
         try:
