@@ -3153,12 +3153,19 @@ def radar_view():
 
 
 def main():
+    import sys
+    print("[MAIN] Starting main()", file=sys.stderr, flush=True)
+
+    print("[MAIN] Calling st.set_page_config()...", file=sys.stderr, flush=True)
     st.set_page_config(page_title=APP_TITLE, layout="wide")
+    print("[MAIN] st.set_page_config() OK", file=sys.stderr, flush=True)
 
     # ===== Railway Persistence Warning =====
     import os
+    print("[MAIN] Checking PORT env var...", file=sys.stderr, flush=True)
     # Detect Railway environment by presence of PORT env variable (Railway-specific)
     if os.environ.get("PORT"):  # Railway sets PORT env var
+        print(f"[MAIN] PORT={os.environ.get('PORT')}", file=sys.stderr, flush=True)
         st.warning(
             "⚠️ **Entorno de prueba en Railway.** La persistencia local con SQLite puede ser efímera. "
             "Válido para test corto de UX, no para uso productivo.",
@@ -3166,14 +3173,20 @@ def main():
         )
 
     # ===== Initialize Database (with defensive error handling) =====
+    print("[MAIN] About to call init_db()...", file=sys.stderr, flush=True)
     try:
         init_db()
+        print("[MAIN] init_db() OK", file=sys.stderr, flush=True)
     except Exception as e:
+        print(f"[MAIN] init_db() FAILED: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
         st.error(f"❌ Startup error: Database initialization failed: {str(e)}")
         st.stop()
 
+    print("[MAIN] About to call inject_css()...", file=sys.stderr, flush=True)
     inject_css()
+    print("[MAIN] inject_css() OK", file=sys.stderr, flush=True)
 
+    print("[MAIN] About to build sidebar...", file=sys.stderr, flush=True)
     with st.sidebar:
         # ==================== TÍTULO REDUCIDO ====================
         st.markdown("### PWR")
@@ -3215,7 +3228,9 @@ def main():
                     st.divider()
 
     # ==================== ROUTING ====================
+    print("[MAIN] About to do routing...", file=sys.stderr, flush=True)
     current_view = st.session_state.get("view", "home")
+    print(f"[MAIN] current_view = {current_view}", file=sys.stderr, flush=True)
 
     if current_view == "radar":
         radar_view()
