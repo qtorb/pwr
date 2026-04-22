@@ -3456,4 +3456,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Streamlit already renders the app through the top-level routing above.
+    pass

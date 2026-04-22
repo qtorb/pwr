@@ -54,7 +54,7 @@ class ExecutionService:
         except (ValueError, ImportError) as e:
             # Guardar error para reportarlo en ejecución
             self.provider_errors["gemini"] = str(e)
-            print(f"⚠️ GeminiProvider no disponible: {e}")
+            print(f"[WARN] GeminiProvider no disponible: {e}")
 
         # Providers simulados para testing/fallback
         self.providers["mock"] = MockEcoProvider()  # Mock será eco
