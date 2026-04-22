@@ -1761,8 +1761,6 @@ def radar_view() -> None:
     - Metadata transparente
     """
     # ==================== ENCABEZADO ====================
-    st.set_page_config(page_title="Radar | PWR", layout="wide")
-
     col1, col2 = st.columns([0.1, 0.9])
     with col1:
         st.write("📡")
