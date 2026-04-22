@@ -1287,10 +1287,194 @@ def inject_css():
                 grid-template-columns: 1fr;
             }
         }
+
+
+        /* ========== PWR GLOBAL SHELL (FASE 1) ========== */
+        :root {
+            --pwr-bg: #ffffff;
+            --pwr-bg-subtle: #f9fafb;
+            --pwr-text: #1f2937;
+            --pwr-text-secondary: #6b7280;
+            --pwr-border: #e5e7eb;
+            --pwr-accent: #2563eb;
+            --pwr-radius: 4px;
+            --pwr-spacing-xs: 8px;
+            --pwr-spacing-sm: 12px;
+            --pwr-spacing-md: 16px;
+            --pwr-spacing-lg: 24px;
+            --pwr-header-height: 60px;
+            --pwr-max-width: 1200px;
+        }
+
+        /* Global app styling */
+        .stApp {
+            background: var(--pwr-bg);
+        }
+
+        /* Hide Streamlit default sidebar */
+        [data-testid="stSidebar"] {
+            display: none !important;
+        }
+
+        /* Main content area - control width and padding */
+        .block-container {
+            max-width: var(--pwr-max-width) !important;
+            margin: 0 auto !important;
+            padding: var(--pwr-spacing-lg) !important;
+        }
+
+        /* PWR Header wrapper */
+        .pwr-header-container {
+            height: var(--pwr-header-height);
+            background: var(--pwr-bg);
+            border-bottom: 1px solid var(--pwr-border);
+            display: flex;
+            align-items: center;
+            padding: 0 var(--pwr-spacing-lg);
+            position: sticky;
+            top: 0;
+            z-index: 999;
+            margin: calc(var(--pwr-spacing-lg) * -1);
+            margin-bottom: var(--pwr-spacing-lg);
+        }
+
+        .pwr-header-brand {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--pwr-text);
+            letter-spacing: -0.5px;
+        }
+
+        .pwr-header-nav {
+            display: flex;
+            gap: var(--pwr-spacing-lg);
+            margin-left: var(--pwr-spacing-xl);
+            flex: 1;
+        }
+
+        .pwr-header-nav-item {
+            font-size: 14px;
+            color: var(--pwr-text-secondary);
+            cursor: pointer;
+            padding: 8px 0;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .pwr-header-nav-item:hover {
+            color: var(--pwr-text);
+        }
+
+        .pwr-header-nav-item.active {
+            color: var(--pwr-accent);
+            border-bottom-color: var(--pwr-accent);
+        }
+
+        .pwr-header-actions {
+            display: flex;
+            gap: var(--pwr-spacing-md);
+            margin-left: auto;
+        }
+
+        /* Typography improvements */
+        html, body, * {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--pwr-text);
+            line-height: 1.2;
+            letter-spacing: -0.3px;
+        }
+
+        p, span, div {
+            color: var(--pwr-text);
+        }
+
+        /* Button normalization */
+        .stButton button {
+            border: 1px solid var(--pwr-border) !important;
+            background: var(--pwr-bg) !important;
+            color: var(--pwr-text) !important;
+            border-radius: var(--pwr-radius) !important;
+            font-weight: 500 !important;
+            font-size: 14px !important;
+            transition: all 0.2s ease !important;
+        }
+
+        .stButton button:hover {
+            background: var(--pwr-bg-subtle) !important;
+            border-color: var(--pwr-text-secondary) !important;
+        }
+
+        /* Primary button */
+        .stButton button[kind="primary"] {
+            background: var(--pwr-accent) !important;
+            color: #ffffff !important;
+            border-color: var(--pwr-accent) !important;
+        }
+
+        .stButton button[kind="primary"]:hover {
+            background: #1d4ed8 !important;
+            border-color: #1d4ed8 !important;
+        }
+
+        /* Card normalization */
+        .pwr-card {
+            background: var(--pwr-bg);
+            border: 1px solid var(--pwr-border);
+            border-radius: var(--pwr-radius);
+            padding: var(--pwr-spacing-lg);
+        }
+
+        /* Spacing utilities */
+        .pwr-spacing-md {
+            margin-bottom: var(--pwr-spacing-md);
+        }
+
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+
+
+
+def render_pwr_header():
+    """Renderiza header superior con navegación principal."""
+    current_view = st.session_state.get("view", "home")
+    col_brand, col_nav_init, col_nav_tasks, col_nav_projects, col_nav_radar, col_actions = st.columns([1.2, 1.2, 1.2, 1.5, 1.2, 2], gap="small")
+    
+    with col_brand:
+        st.markdown("<div class='pwr-header-brand'>PWR</div>", unsafe_allow_html=True)
+    
+    with col_nav_init:
+        if st.button("Inicio", use_container_width=True, key="nav_home"):
+            st.session_state["view"] = "home"
+            st.rerun()
+    
+    with col_nav_tasks:
+        if st.button("Tareas", use_container_width=True, key="nav_tasks"):
+            st.session_state["view"] = "new_task"
+            st.rerun()
+    
+    with col_nav_projects:
+        if st.button("Proyectos", use_container_width=True, key="nav_projects"):
+            st.session_state["view"] = "project_view"
+            st.rerun()
+    
+    with col_nav_radar:
+        if st.button("Radar", use_container_width=True, key="nav_radar"):
+            st.session_state["view"] = "radar"
+            st.rerun()
+    
+    with col_actions:
+        if st.button("Nueva Tarea", use_container_width=True, key="nav_new_task_primary", type="primary"):
+            st.session_state["view"] = "new_task"
+            st.rerun()
+    
+    st.divider()
 
 
 def project_selector():
@@ -3148,6 +3332,35 @@ def radar_view():
 
     *{metadata['note']}*
     """)
+
+
+
+# ==================== APP ENTRY POINT ====================
+if "view" not in st.session_state:
+    st.session_state["view"] = "home"
+if "selected_task_id" not in st.session_state:
+    st.session_state["selected_task_id"] = None
+if "active_project_id" not in st.session_state:
+    st.session_state["active_project_id"] = None
+
+st.set_page_config(page_title=APP_TITLE, layout="wide")
+init_db()
+inject_css()
+render_pwr_header()
+
+current_view = st.session_state.get("view", "home")
+if current_view == "home":
+    home_view()
+elif current_view == "new_task":
+    new_task_view()
+elif current_view == "project_view":
+    project_view()
+elif current_view == "radar":
+    radar_view()
+elif current_view == "onboarding":
+    onboarding_view()
+else:
+    home_view()
 
 
 def main():
