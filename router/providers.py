@@ -4,6 +4,39 @@ from typing import Optional
 from .domain import TaskInput, ExecutionError
 
 
+def build_execution_prompt(task: TaskInput) -> str:
+    """Builds the exact text payload sent to the text-generation provider."""
+    return f"""PWR EXECUTION BRIEF
+
+PROJECT
+Name: {task.project_name or "Sin proyecto"}
+Objective: {task.project_objective or "Sin objetivo definido"}
+
+WORK
+Type: {task.task_type or "Pensar"}
+Title: {task.title}
+Description:
+{task.description or "(Sin descripcion)"}
+
+STABLE PROJECT CONTEXT
+{task.project_base_context or "(Sin contexto estable de proyecto)"}
+
+PROJECT BASE INSTRUCTIONS
+{task.project_base_instructions or "(Sin instrucciones base de proyecto)"}
+
+TEMPORARY TASK CONTEXT
+{task.context or "(Sin contexto temporal adicional)"}
+
+PWR BASE RULES
+- Usa primero el contexto estable del proyecto y despues el contexto temporal de la tarea.
+- Si falta informacion, dilo de forma explicita.
+- Separa hechos, inferencias y recomendaciones cuando sea util.
+- Devuelve un resultado claro, accionable y reutilizable.
+
+EXECUTION
+Ejecuta la tarea con precision y claridad."""
+
+
 class BaseProvider:
     """Interfaz base para todos los providers."""
     name: str
@@ -106,18 +139,7 @@ class GeminiProvider(BaseProvider):
 
     def _build_prompt(self, task: TaskInput) -> str:
         """Construye el prompt desde TaskInput."""
-        return f"""Proyecto: {task.project_name or "Sin proyecto"}
-Tipo de trabajo: {task.task_type}
-
-Título: {task.title}
-
-Descripción:
-{task.description}
-
-Contexto específico:
-{task.context if task.context else "(Sin contexto adicional)"}
-
-Ejecuta la tarea con precisión y claridad."""
+        return build_execution_prompt(task)
 
     def _classify_error(self, exc: Exception) -> tuple[str, str]:
         """Clasifica excepciones en códigos de error explícitos."""

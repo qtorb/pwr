@@ -1,144 +1,104 @@
 #!/usr/bin/env python3
-"""
-Script de validación de configuración del Router v1 + Gemini.
-Ejecuta: python validate_setup.py
-"""
+"""Validate the current local PWR runtime."""
 
+import importlib.util
 import os
+import py_compile
 import sys
 from pathlib import Path
 
-print("\n" + "="*60)
-print("VALIDACIÓN DE SETUP: PWR Router v1 + Gemini 2.5")
-print("="*60 + "\n")
 
-# 1. Verificar estructura de archivos
-print("1. Verificando estructura de archivos...")
-required_files = [
+ROOT = Path(__file__).resolve().parent
+EXPECTED_PYTHON = (3, 11)
+REQUIRED_FILES = [
+    "app_main.py",
+    "requirements.txt",
     "router/domain.py",
-    "router/mode_registry.py",
     "router/providers.py",
     "router/execution_service.py",
     "router/decision_engine.py",
-    "router/metadata_builder.py",
-    "app.py",
+    "router/model_catalog.py",
     ".env.example",
 ]
+EXPECTED_DB = ROOT / "pwr_data" / "pwr.db"
 
-all_exist = True
-for file in required_files:
-    if Path(file).exists():
-        print(f"   ✅ {file}")
+
+def ok(message: str) -> None:
+    print(f"[OK] {message}")
+
+
+def warn(message: str) -> None:
+    print(f"[WARN] {message}")
+
+
+def fail(message: str) -> None:
+    print(f"[FAIL] {message}")
+
+
+def has_module(module_name: str) -> bool:
+    return importlib.util.find_spec(module_name) is not None
+
+
+def main() -> int:
+    print("PWR local setup validation")
+    print("=" * 32)
+
+    failures = 0
+
+    if sys.version_info[:2] == EXPECTED_PYTHON:
+        ok(f"Python {sys.version.split()[0]} matches 3.11.x")
     else:
-        print(f"   ❌ {file} FALTA")
-        all_exist = False
+        fail(f"Python {sys.version.split()[0]} detected; expected 3.11.x")
+        failures += 1
 
-if not all_exist:
-    print("\n❌ Algunos archivos no existen. Verifica la instalación.")
-    sys.exit(1)
+    for rel_path in REQUIRED_FILES:
+        if (ROOT / rel_path).exists():
+            ok(rel_path)
+        else:
+            fail(f"{rel_path} missing")
+            failures += 1
 
-print("   ✅ Todos los archivos presentes\n")
-
-# 2. Verificar variable de entorno
-print("2. Verificando GEMINI_API_KEY...")
-api_key = os.getenv("GEMINI_API_KEY")
-if api_key:
-    masked = api_key[:4] + "*" * (len(api_key) - 8) + api_key[-4:]
-    print(f"   ✅ GEMINI_API_KEY configurada: {masked}")
-else:
-    env_file = Path(".env")
-    if env_file.exists():
-        with open(env_file) as f:
-            content = f.read()
-            if "GEMINI_API_KEY=" in content:
-                print("   ⚠️  GEMINI_API_KEY está en .env pero no exportada")
-                print("   → Ejecuta: export GEMINI_API_KEY=\"tu-clave-aquí\"")
-            else:
-                print("   ❌ GEMINI_API_KEY no configurada en .env")
+    if has_module("streamlit"):
+        ok("streamlit importable")
     else:
-        print("   ❌ .env no existe")
-        print("   → Ejecuta: cp .env.example .env")
-        print("   → Edita .env y pega tu API key")
+        fail("streamlit missing; run .\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt")
+        failures += 1
 
-print()
+    if has_module("google.genai"):
+        ok("google-genai importable")
+    else:
+        fail("google-genai missing; run .\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt")
+        failures += 1
 
-# 3. Verificar dependencias Python
-print("3. Verificando dependencias Python...")
-dependencies = {
-    "google": "google-genai",
-    "streamlit": "streamlit",
-    "dotenv": "python-dotenv",
-}
+    api_key = os.getenv("GEMINI_API_KEY")
+    if api_key:
+        masked = api_key[:4] + "*" * max(len(api_key) - 8, 0) + api_key[-4:]
+        ok(f"GEMINI_API_KEY available in process: {masked}")
+        ok("real Gemini smoke is eligible: .\\.venv\\Scripts\\python.exe run_smoke_test.py --live-gemini")
+    else:
+        warn("GEMINI_API_KEY is not available in this process; real Gemini smoke remains pending")
+        warn("PowerShell: $env:GEMINI_API_KEY = \"your-gemini-key\"")
 
-missing = []
-for import_name, package_name in dependencies.items():
     try:
-        if import_name == "google":
-            from google import genai
-        elif import_name == "dotenv":
-            from dotenv import load_dotenv
-        else:
-            __import__(import_name)
-        print(f"   ✅ {package_name}")
-    except ImportError:
-        print(f"   ❌ {package_name} NO INSTALADO")
-        missing.append(package_name)
+        py_compile.compile(str(ROOT / "app_main.py"), doraise=True)
+        ok("app_main.py compiles")
+    except py_compile.PyCompileError as exc:
+        fail(f"app_main.py does not compile: {exc.msg}")
+        failures += 1
 
-if missing:
-    print(f"\n   → Instala faltantes: pip install {' '.join(missing)}")
+    if EXPECTED_DB.exists():
+        ok("pwr_data/pwr.db exists")
+    else:
+        warn("pwr_data/pwr.db does not exist yet; first Streamlit run should create it")
 
-print()
+    print("=" * 32)
+    if failures:
+        fail(f"{failures} blocking setup issue(s)")
+        return 1
 
-# 4. Verificar importabilidad del router
-print("4. Verificando importabilidad del Router...")
-try:
-    from router import ExecutionService, TaskInput
-    print("   ✅ Router importable")
-except ImportError as e:
-    print(f"   ❌ Error importando router: {e}")
-    sys.exit(1)
+    ok("local setup looks runnable")
+    return 0
 
-print()
 
-# 5. Verificar GeminiProvider
-print("5. Verificando GeminiProvider...")
-try:
-    from router.providers import GeminiProvider
-    print("   ✅ GeminiProvider importable")
-
-    # Intentar inicializar (falla si no hay API key, pero eso es esperado)
-    try:
-        provider = GeminiProvider()
-        print("   ✅ GeminiProvider inicializado (API key válida)")
-    except ValueError as e:
-        if "GEMINI_API_KEY no configurada" in str(e):
-            print("   ⚠️  GeminiProvider necesita GEMINI_API_KEY configurada")
-        else:
-            print(f"   ⚠️  GeminiProvider: {e}")
-except ImportError as e:
-    print(f"   ❌ Error importando GeminiProvider: {e}")
-
-print()
-
-# 6. Resumen
-print("="*60)
-print("RESUMEN DE VALIDACIÓN")
-print("="*60)
-print("""
-✅ Si ves este mensaje, la estructura está bien.
-⚠️  Si falta GEMINI_API_KEY, configúrala antes de usar.
-❌ Si ves errores, revisa SETUP_GEMINI.md
-
-PRÓXIMOS PASOS:
-1. cp .env.example .env
-2. Edita .env y pega tu API key desde https://aistudio.google.com/app/apikey
-3. pip install google-genai python-dotenv
-4. streamlit run app.py
-
-DOCUMENTACIÓN:
-- SETUP_GEMINI.md: Configuración detallada
-- router/: Código del Router
-- app.py: Aplicación Streamlit
-""")
-
-print()
+if __name__ == "__main__":
+    raise SystemExit(main())

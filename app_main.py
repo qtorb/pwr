@@ -1,4 +1,5 @@
-import json
+﻿import json
+import hashlib
 import mimetypes
 import sqlite3
 from pathlib import Path
@@ -8,11 +9,14 @@ from typing import Optional, List, Dict
 import streamlit as st
 
 from router import ExecutionService, TaskInput, ModelCatalog
+from router.decision_engine import DecisionEngine
+from router.providers import build_execution_prompt
 
 APP_TITLE = "Portable Work Router"
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "pwr_data"
 UPLOADS_DIR = DATA_DIR / "uploads"
+PORTABLE_RUNS_DIR = DATA_DIR / "portable_runs"
 DB_PATH = DATA_DIR / "pwr.db"
 
 TIPOS_TAREA = ["Pensar", "Escribir", "Programar", "Revisar", "Decidir"]
@@ -21,6 +25,7 @@ TIPOS_TAREA = ["Pensar", "Escribir", "Programar", "Revisar", "Decidir"]
 def ensure_dirs() -> None:
     DATA_DIR.mkdir(exist_ok=True)
     UPLOADS_DIR.mkdir(exist_ok=True)
+    PORTABLE_RUNS_DIR.mkdir(exist_ok=True)
 
 
 def get_conn() -> sqlite3.Connection:
@@ -40,6 +45,194 @@ def safe_json_loads(value: str, default):
         return default
 
 
+def repo_relative_path(path: Path) -> str:
+    try:
+        return path.resolve(strict=False).relative_to(BASE_DIR).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def portable_artifact_path(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    path = Path(text)
+    if path.is_absolute():
+        try:
+            return path.resolve(strict=False).relative_to(BASE_DIR).as_posix()
+        except ValueError:
+            return text
+    return text.replace("\\", "/")
+
+
+def migrate_portable_artifact_paths(conn: sqlite3.Connection) -> None:
+    try:
+        rows = conn.execute(
+            "SELECT id, artifact_md_path, artifact_json_path FROM executions_history"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return
+
+    for row in rows:
+        md_path = portable_artifact_path(row["artifact_md_path"])
+        json_path = portable_artifact_path(row["artifact_json_path"])
+        if md_path != row["artifact_md_path"] or json_path != row["artifact_json_path"]:
+            conn.execute(
+                """
+                UPDATE executions_history
+                SET artifact_md_path = ?, artifact_json_path = ?
+                WHERE id = ?
+                """,
+                (md_path, json_path, row["id"]),
+            )
+
+
+def build_run_fingerprint(
+    task_id: int,
+    execution_status: str,
+    model: str,
+    provider: str,
+    prompt_text: str,
+    output_text: str,
+    error_code: str,
+    error_message: str,
+) -> str:
+    payload = {
+        "task_id": task_id,
+        "execution_status": execution_status or "",
+        "model": model or "",
+        "provider": provider or "",
+        "prompt_text": prompt_text or "",
+        "output_text": output_text or "",
+        "error_code": error_code or "",
+        "error_message": error_message or "",
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+TASK_EXECUTION_STATES = {"draft", "preview", "pending", "executed", "failed"}
+LEGACY_TASK_STATES = {
+    "borrador": "draft",
+    "router_listo": "pending",
+    "ejecutado": "executed",
+}
+
+
+def row_value(row, key: str, default=""):
+    try:
+        if hasattr(row, "keys") and key in row.keys():
+            value = row[key]
+            return default if value is None else value
+        if isinstance(row, dict):
+            value = row.get(key, default)
+            return default if value is None else value
+    except Exception:
+        return default
+    return default
+
+
+def normalize_execution_state(value: str) -> str:
+    state = str(value or "").strip().lower()
+    if state in TASK_EXECUTION_STATES:
+        return state
+    return LEGACY_TASK_STATES.get(state, "")
+
+
+def task_execution_state(task) -> str:
+    execution_state = normalize_execution_state(row_value(task, "execution_status"))
+    status_state = normalize_execution_state(row_value(task, "status"))
+    output = str(row_value(task, "llm_output") or "").strip()
+
+    if execution_state in {"executed", "preview", "failed", "draft"}:
+        return execution_state
+    if status_state in {"executed", "preview", "failed", "draft"}:
+        return status_state
+    if output and not execution_state:
+        return "executed"
+    return execution_state or status_state or "pending"
+
+
+def task_state_caption(state: str) -> str:
+    return {
+        "draft": "Borrador",
+        "preview": "Propuesta previa guardada",
+        "pending": "Pendiente de ejecucion",
+        "executed": "Resultado disponible",
+        "failed": "Ejecucion fallida",
+    }.get(state, "Pendiente de ejecucion")
+
+
+def open_task_workspace(project_id: int, task_id: int) -> None:
+    st.session_state["active_project_id"] = project_id
+    st.session_state["selected_task_id"] = task_id
+    st.session_state["view"] = "project_view"
+
+
+def build_task_input(
+    task_id: int,
+    title: str,
+    description: str,
+    task_type: str,
+    context: str,
+    project,
+    preferred_mode: Optional[str] = None,
+) -> TaskInput:
+    return TaskInput(
+        task_id=task_id,
+        title=title or "",
+        description=description or "",
+        task_type=task_type or "Pensar",
+        context=context or "",
+        project_name=row_value(project, "name"),
+        project_objective=row_value(project, "objective"),
+        project_base_context=row_value(project, "base_context"),
+        project_base_instructions=row_value(project, "base_instructions"),
+        preferred_mode=preferred_mode,
+    )
+
+
+def build_task_input_from_rows(task, project, context_override: Optional[str] = None, preferred_mode: Optional[str] = None) -> TaskInput:
+    return build_task_input(
+        task_id=int(row_value(task, "id", 0) or 0),
+        title=row_value(task, "title"),
+        description=row_value(task, "description"),
+        task_type=row_value(task, "task_type", "Pensar"),
+        context=context_override if context_override is not None else row_value(task, "context"),
+        project=project,
+        preferred_mode=preferred_mode,
+    )
+
+
+def summarize_router_decision(decision) -> str:
+    return (
+        f"Preparado para ejecucion\n"
+        f"Modo: {decision.mode}\n"
+        f"Proveedor: {decision.provider}\n"
+        f"Modelo: {decision.model}\n\n"
+        f"Motivo:\n- {decision.reasoning_path}"
+    )
+
+
+def normalize_trace(trace: dict) -> dict:
+    if not trace:
+        return {}
+    return {
+        "mode": trace.get("mode", ""),
+        "model_used": trace.get("model_used") or trace.get("model", ""),
+        "provider_used": trace.get("provider_used") or trace.get("provider", ""),
+        "reasoning_path": trace.get("reasoning_path", ""),
+        "latency_ms": trace.get("latency_ms", 0),
+        "estimated_cost": trace.get("estimated_cost", 0),
+        "status": trace.get("status", ""),
+        "error_code": trace.get("error_code"),
+        "error_message": trace.get("error_message"),
+        "execution_prompt": trace.get("execution_prompt", ""),
+        "is_first_execution": trace.get("is_first_execution", False),
+    }
+
+
 def human_size(num_bytes: int) -> str:
     if num_bytes < 1024:
         return f"{num_bytes} B"
@@ -52,6 +245,49 @@ def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition_
     cols = [row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
     if column not in cols:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition_sql}")
+
+
+def normalize_existing_task_states(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        UPDATE tasks
+        SET execution_status = CASE
+            WHEN LOWER(COALESCE(status, '')) = 'failed' THEN 'failed'
+            WHEN LOWER(COALESCE(status, '')) = 'preview' THEN 'preview'
+            WHEN LOWER(COALESCE(router_summary, '')) LIKE 'propuesta previa%' THEN 'preview'
+            WHEN LOWER(COALESCE(llm_output, '')) LIKE '[propuesta previa%' THEN 'preview'
+            WHEN LOWER(COALESCE(llm_output, '')) LIKE 'propuesta previa%' THEN 'preview'
+            WHEN LOWER(COALESCE(status, '')) IN ('executed', 'ejecutado') THEN 'executed'
+            WHEN TRIM(COALESCE(llm_output, '')) != '' THEN 'executed'
+            WHEN LOWER(COALESCE(status, '')) = 'borrador' THEN 'draft'
+            ELSE 'pending'
+        END
+        WHERE execution_status IS NULL
+           OR TRIM(execution_status) = ''
+           OR LOWER(execution_status) NOT IN ('draft', 'preview', 'pending', 'executed', 'failed')
+           OR (LOWER(COALESCE(status, '')) = 'failed' AND LOWER(COALESCE(execution_status, '')) != 'failed')
+           OR (LOWER(COALESCE(status, '')) = 'preview' AND LOWER(COALESCE(execution_status, '')) != 'preview')
+           OR (LOWER(COALESCE(router_summary, '')) LIKE 'propuesta previa%' AND LOWER(COALESCE(execution_status, '')) != 'preview')
+           OR (LOWER(COALESCE(llm_output, '')) LIKE '[propuesta previa%' AND LOWER(COALESCE(execution_status, '')) != 'preview')
+           OR (LOWER(COALESCE(llm_output, '')) LIKE 'propuesta previa%' AND LOWER(COALESCE(execution_status, '')) != 'preview')
+           OR (LOWER(COALESCE(status, '')) IN ('executed', 'ejecutado') AND LOWER(COALESCE(execution_status, '')) != 'executed')
+           OR (LOWER(execution_status) = 'pending' AND TRIM(COALESCE(llm_output, '')) != '')
+        """
+    )
+    conn.execute(
+        """
+        UPDATE tasks
+        SET status = execution_status
+        WHERE status IS NULL
+           OR TRIM(status) = ''
+           OR LOWER(status) IN ('borrador', 'router_listo', 'ejecutado')
+           OR LOWER(status) NOT IN ('draft', 'preview', 'pending', 'executed', 'failed')
+           OR (
+                LOWER(COALESCE(execution_status, '')) IN ('draft', 'preview', 'pending', 'executed', 'failed')
+                AND LOWER(COALESCE(status, '')) != LOWER(COALESCE(execution_status, ''))
+           )
+        """
+    )
 
 
 def init_db() -> None:
@@ -108,7 +344,8 @@ def init_db() -> None:
                 description TEXT DEFAULT '',
                 task_type TEXT DEFAULT 'Pensar',
                 context TEXT DEFAULT '',
-                status TEXT DEFAULT 'borrador',
+                status TEXT DEFAULT 'pending',
+                execution_status TEXT DEFAULT 'pending',
                 suggested_model TEXT DEFAULT '',
                 router_summary TEXT DEFAULT '',
                 llm_output TEXT DEFAULT '',
@@ -155,7 +392,8 @@ def init_db() -> None:
         ensure_column(conn, "tasks", "description", "TEXT DEFAULT ''")
         ensure_column(conn, "tasks", "task_type", "TEXT DEFAULT 'Pensar'")
         ensure_column(conn, "tasks", "context", "TEXT DEFAULT ''")
-        ensure_column(conn, "tasks", "status", "TEXT DEFAULT 'borrador'")
+        ensure_column(conn, "tasks", "status", "TEXT DEFAULT 'pending'")
+        ensure_column(conn, "tasks", "execution_status", "TEXT DEFAULT 'pending'")
         ensure_column(conn, "tasks", "suggested_model", "TEXT DEFAULT ''")
         ensure_column(conn, "tasks", "router_summary", "TEXT DEFAULT ''")
         ensure_column(conn, "tasks", "router_metrics_json", "TEXT DEFAULT '{}'")  # Bloque E0: metrics estructuradas
@@ -169,8 +407,10 @@ def init_db() -> None:
         ensure_column(conn, "assets", "summary", "TEXT DEFAULT ''")
         ensure_column(conn, "assets", "created_at", "TEXT DEFAULT ''")
 
+        normalize_existing_task_states(conn)
+
         # ==================== Model Catalog (Bloque D - ACTIVO) ====================
-        # Tabla viva para catálogo de modelos y configuración de modos del Router
+        # Tabla viva para catÃ¡logo de modelos y configuraciÃ³n de modos del Router
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS model_catalog (
@@ -186,20 +426,20 @@ def init_db() -> None:
                 mode TEXT,                               -- "eco" o "racing" [BRIDGE TEMPORAL]
                 is_internal INTEGER DEFAULT 0,           -- 1=mock/test, 0=real/public
                 deprecated_at TEXT,                      -- ISO timestamp si deprecated
-                updated_at TEXT NOT NULL                 -- Cuándo fue actualizado
+                updated_at TEXT NOT NULL                 -- CuÃ¡ndo fue actualizado
             )
             """
         )
 
-        # NOTA: 'mode' es BRIDGE TEMPORAL para esta iteración (Bloque D)
-        # FUTURO (Bloque E+): 'mode' migrará a tabla separada 'router_policy'
-        # que tendrá reglas de decisión (scoring, umbrales, etc.)
-        # No abstraer policy ahora. Mantener 'mode' aquí temporalmente.
+        # NOTA: 'mode' es BRIDGE TEMPORAL para esta iteraciÃ³n (Bloque D)
+        # FUTURO (Bloque E+): 'mode' migrarÃ¡ a tabla separada 'router_policy'
+        # que tendrÃ¡ reglas de decisiÃ³n (scoring, umbrales, etc.)
+        # No abstraer policy ahora. Mantener 'mode' aquÃ­ temporalmente.
 
         # ===== Seeds iniciales model_catalog (garantizan equivalencia) =====
         catalog_count = conn.execute("SELECT COUNT(*) FROM model_catalog").fetchone()[0]
         if catalog_count == 0:
-            # Eco: rápido, barato
+            # Eco: rÃ¡pido, barato
             conn.execute("""
                 INSERT INTO model_catalog
                 (provider, model_name, pricing_input_per_mtok, pricing_output_per_mtok,
@@ -235,7 +475,7 @@ def init_db() -> None:
             """, ('mock', 'mock-racing', 0.0, 0.0, 1000000,
                   '{"vision":false,"reasoning":false}', 0.30, 'active', 'racing', 1, now_iso()))
 
-        # ===== Executions History (Bloque E0: schema preparado, sin persistencia aún) =====
+        # ===== Executions History (Bloque E0: schema preparado, sin persistencia aÃºn) =====
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS executions_history (
@@ -248,13 +488,30 @@ def init_db() -> None:
                 provider TEXT,                    -- "gemini", "mock"
                 latency_ms INTEGER,               -- milliseconds
                 estimated_cost REAL,              -- $0.05, $0.30, etc
-                executed_at TEXT NOT NULL,        -- timestamp de ejecución
+                prompt_text TEXT DEFAULT '',
+                output_text TEXT DEFAULT '',
+                error_code TEXT DEFAULT '',
+                error_message TEXT DEFAULT '',
+                router_trace_json TEXT DEFAULT '{}',
+                run_fingerprint TEXT DEFAULT '',
+                artifact_md_path TEXT DEFAULT '',
+                artifact_json_path TEXT DEFAULT '',
+                executed_at TEXT NOT NULL,        -- timestamp de ejecuciÃ³n
                 created_at TEXT NOT NULL,         -- timestamp de registro (ahora)
                 FOREIGN KEY(task_id) REFERENCES tasks(id),
                 FOREIGN KEY(project_id) REFERENCES projects(id)
             )
             """
         )
+        ensure_column(conn, "executions_history", "prompt_text", "TEXT DEFAULT ''")
+        ensure_column(conn, "executions_history", "output_text", "TEXT DEFAULT ''")
+        ensure_column(conn, "executions_history", "error_code", "TEXT DEFAULT ''")
+        ensure_column(conn, "executions_history", "error_message", "TEXT DEFAULT ''")
+        ensure_column(conn, "executions_history", "router_trace_json", "TEXT DEFAULT '{}'")
+        ensure_column(conn, "executions_history", "run_fingerprint", "TEXT DEFAULT ''")
+        ensure_column(conn, "executions_history", "artifact_md_path", "TEXT DEFAULT ''")
+        ensure_column(conn, "executions_history", "artifact_json_path", "TEXT DEFAULT ''")
+        migrate_portable_artifact_paths(conn)
 
         count = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
         if count == 0:
@@ -278,10 +535,10 @@ def init_db() -> None:
                     (
                         "Portable Work Router",
                         make_slug("Portable Work Router"),
-                        "Router de trabajo con múltiples LLM.",
+                        "Router de trabajo con mÃºltiples LLM.",
                         "Organizar tareas, contexto y activos portables.",
                         "Proyecto centrado en ordenar trabajo con LLMs para heavy users fuera del IDE.",
-                        "Todo en castellano. Sin emojis. Estética sobria B2B.",
+                        "Todo en castellano. Sin emojis. EstÃ©tica sobria B2B.",
                         json.dumps(["pwr", "producto", "ia"], ensure_ascii=False),
                         1,
                         created,
@@ -292,8 +549,8 @@ def init_db() -> None:
                         make_slug("RosmarOps"),
                         "SEO adversarial y ciberseguridad.",
                         "Explorar contenidos, herramientas y posicionamiento.",
-                        "Proyecto centrado en SEO adversarial, seguridad y contenidos técnicos.",
-                        "Priorizar claridad técnica y tono sobrio.",
+                        "Proyecto centrado en SEO adversarial, seguridad y contenidos tÃ©cnicos.",
+                        "Priorizar claridad tÃ©cnica y tono sobrio.",
                         json.dumps(["rosmarops", "seo", "seguridad"], ensure_ascii=False),
                         1,
                         created,
@@ -363,7 +620,7 @@ def get_project(project_id: int) -> Optional[sqlite3.Row]:
 def update_project(project_id: int, name: str, description: str, objective: str, base_context: str, base_instructions: str, tags: str) -> None:
     import re
 
-    # Regenerar slug si el nombre cambió
+    # Regenerar slug si el nombre cambiÃ³
     slug = re.sub(r'[^\w\s-]', '', name.lower()).strip()
     slug = re.sub(r'[-\s]+', '-', slug)
     if not slug:
@@ -457,45 +714,23 @@ def get_project_documents(project_id: int) -> List[sqlite3.Row]:
 
 
 def score_model(task_type: str, text: str, inherited_context: str, project_docs: List[sqlite3.Row], task_files: List[Dict]) -> Dict:
-    combined = f"{text} {inherited_context}".lower()
-    scores = {"Claude Sonnet": 0, "ChatGPT": 0, "Codex": 0, "Gemini": 0}
-    reasons = []
-
-    def add(model: str, points: int, reason: str):
-        scores[model] += points
-        reasons.append((model, points, reason))
-
-    if task_type == "Programar" or any(k in combined for k in ["python", "api", "bug", "sql", "código", "deploy"]):
-        add("Codex", 6, "La tarea tiene señales técnicas o de programación.")
-    if task_type == "Escribir" or any(k in combined for k in ["mensaje", "narrativa", "contenido", "estrategia", "editorial"]):
-        add("Claude Sonnet", 5, "La tarea pide redacción estructurada o criterio editorial.")
-    if task_type == "Pensar" or any(k in combined for k in ["ideas", "opciones", "brainstorm", "hipótesis", "explorar"]):
-        add("ChatGPT", 4, "La tarea parece de exploración o generación de opciones.")
-        add("Claude Sonnet", 2, "También puede ayudar a ordenar mejor la reflexión.")
-    if task_type == "Decidir":
-        add("ChatGPT", 4, "La tarea parece orientada a comparar y decidir rápido.")
-        add("Claude Sonnet", 2, "Puede ayudar a estructurar trade-offs.")
-    if task_type == "Revisar":
-        add("Claude Sonnet", 4, "La tarea parece de revisión o lectura crítica.")
-    if len(inherited_context.strip()) > 300:
-        add("Claude Sonnet", 2, "Hay bastante contexto heredado y conviene profundidad.")
-    if project_docs:
-        add("Claude Sonnet", 2, "El proyecto ya tiene documentación de referencia asociada.")
-    if task_files:
-        add("Claude Sonnet", 2, "La tarea incluye adjuntos y conviene una lectura estructurada.")
-        add("Gemini", 1, "Puede servir como lectura alternativa o contraste.")
-
-    ranking = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    recommended = ranking[0][0]
-    top_reasons = [r for m, _, r in reasons if m == recommended][:3]
-    fit = "alto" if ranking[0][1] - ranking[1][1] >= 3 else "medio"
-
+    # Legacy compatibility wrapper: live routing now comes from DecisionEngine.
+    task_input = TaskInput(
+        task_id=0,
+        title=text,
+        description="",
+        task_type=task_type,
+        context="",
+        project_base_context=inherited_context or "",
+    )
+    decision = DecisionEngine().decide(task_input)
     return {
-        "recommended_model": recommended,
-        "fit": fit,
-        "scores": scores,
-        "reasons": top_reasons,
+        "recommended_model": decision.model,
+        "fit": decision.mode,
+        "scores": {"mode": decision.mode, "complexity": decision.complexity_score},
+        "reasons": [decision.reasoning_path],
     }
+
 
 
 def create_task(project_id: int, title: str, description: str, task_type: str, context: str, uploaded_files) -> int:
@@ -504,36 +739,48 @@ def create_task(project_id: int, title: str, description: str, task_type: str, c
         cur = conn.execute(
             """
             INSERT INTO tasks (
-                project_id, title, description, task_type, context, status,
+                project_id, title, description, task_type, context, status, execution_status,
                 suggested_model, router_summary, llm_output, useful_extract, uploads_json, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, 'router_listo', '', '', '', '', '[]', ?, ?)
+            VALUES (?, ?, ?, ?, ?, 'pending', 'pending', '', '', '', '', '[]', ?, ?)
             """,
             (project_id, title.strip(), description.strip(), task_type, context.strip(), created, created),
         )
         tid = int(cur.lastrowid)
 
         project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
-        docs = conn.execute("SELECT * FROM project_documents WHERE project_id = ?", (project_id,)).fetchall()
         task_files = save_task_files(project_id, tid, uploaded_files)
-        router = score_model(task_type, f"{title} {description} {context}", project["base_context"], docs, task_files)
-
-        summary = "Modelo recomendado: {}\nNivel de ajuste: {}\n\nMotivos:\n{}".format(
-            router["recommended_model"],
-            router["fit"],
-            "\n".join([f"- {r}" for r in router["reasons"]]) if router["reasons"] else "- Sin motivos destacados",
+        task_input = build_task_input(
+            task_id=tid,
+            title=title,
+            description=description,
+            task_type=task_type,
+            context=context,
+            project=project,
         )
+        decision = DecisionEngine(ModelCatalog(conn)).decide(task_input)
+        summary = summarize_router_decision(decision)
+        router_metrics = {
+            "mode": decision.mode,
+            "model": decision.model,
+            "provider": decision.provider,
+            "complexity_score": decision.complexity_score,
+            "status": "pending",
+            "reasoning_path": decision.reasoning_path,
+            "execution_prompt": build_execution_prompt(task_input),
+        }
 
         conn.execute(
             """
             UPDATE tasks
-            SET suggested_model = ?, router_summary = ?, uploads_json = ?, updated_at = ?
+            SET suggested_model = ?, router_summary = ?, uploads_json = ?, router_metrics_json = ?, updated_at = ?
             WHERE id = ?
             """,
             (
-                router["recommended_model"],
+                decision.model,
                 summary,
                 json.dumps(task_files, ensure_ascii=False),
+                json.dumps(router_metrics, ensure_ascii=False),
                 now_iso(),
                 tid,
             ),
@@ -564,6 +811,253 @@ def get_task(task_id: int) -> Optional[sqlite3.Row]:
         return conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
 
 
+def slugify_for_path(value: str, fallback: str) -> str:
+    import re
+    slug = re.sub(r"[^\w\s-]", "", (value or "").lower(), flags=re.UNICODE).strip()
+    slug = re.sub(r"[-\s]+", "-", slug)
+    return slug[:60] or fallback
+
+
+def compact_text(value: str, max_chars: int = 1200) -> str:
+    text = (value or "").strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "\n...[truncated]"
+
+
+def portable_run_dir(project_id: int, task_id: int) -> Path:
+    path = PORTABLE_RUNS_DIR / f"project_{project_id:04d}" / f"task_{task_id:04d}"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def write_portable_run_artifacts(run_id: int, project, task, run_data: dict) -> dict:
+    project_id = int(row_value(task, "project_id", 0) or 0)
+    task_id = int(row_value(task, "id", 0) or 0)
+    created = run_data.get("executed_at") or now_iso()
+    safe_title = slugify_for_path(row_value(task, "title"), f"task-{task_id}")
+    base_name = f"run_{run_id:04d}_{safe_title}"
+    target_dir = portable_run_dir(project_id, task_id)
+    md_path = target_dir / f"{base_name}.md"
+    json_path = target_dir / f"{base_name}.json"
+
+    artifact = {
+        "run_id": run_id,
+        "timestamp": created,
+        "execution_status": run_data.get("execution_status", ""),
+        "project": {
+            "id": project_id,
+            "name": row_value(project, "name"),
+            "objective": row_value(project, "objective"),
+            "base_context_summary": compact_text(row_value(project, "base_context")),
+            "base_instructions_summary": compact_text(row_value(project, "base_instructions")),
+        },
+        "task": {
+            "id": task_id,
+            "title": row_value(task, "title"),
+            "description": row_value(task, "description"),
+            "task_type": row_value(task, "task_type"),
+            "temporary_context": row_value(task, "context"),
+        },
+        "routing": {
+            "mode": run_data.get("mode", ""),
+            "provider": run_data.get("provider", ""),
+            "model": run_data.get("model", ""),
+            "latency_ms": run_data.get("latency_ms", 0),
+            "estimated_cost": run_data.get("estimated_cost", 0),
+        },
+        "prompt": run_data.get("prompt_text", ""),
+        "output": run_data.get("output_text", ""),
+        "error": {
+            "code": run_data.get("error_code", ""),
+            "message": run_data.get("error_message", ""),
+        },
+        "router_trace": run_data.get("router_trace", {}),
+    }
+
+    md = f"""# PWR Run Artifact
+
+Project: {artifact['project']['name']}
+Task: {artifact['task']['title']}
+Status: {artifact['execution_status']}
+Timestamp: {artifact['timestamp']}
+
+## Work
+
+- Type: {artifact['task']['task_type']}
+- Mode: {artifact['routing']['mode']}
+- Provider: {artifact['routing']['provider']}
+- Model: {artifact['routing']['model']}
+
+## Stable Project Context
+
+{artifact['project']['base_context_summary'] or '(none)'}
+
+## Project Base Instructions
+
+{artifact['project']['base_instructions_summary'] or '(none)'}
+
+## Temporary Task Context
+
+{artifact['task']['temporary_context'] or '(none)'}
+
+## Execution Prompt
+
+```text
+{artifact['prompt']}
+```
+
+## Output
+
+{artifact['output'] or '(no output)'}
+
+## Error
+
+{artifact['error']['code'] or '(none)'}
+{artifact['error']['message'] or ''}
+"""
+    md_path.write_text(md, encoding="utf-8")
+    json_path.write_text(json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"md": repo_relative_path(md_path), "json": repo_relative_path(json_path)}
+
+
+def persist_execution_history(
+    conn: sqlite3.Connection,
+    task_id: int,
+    model_used: str,
+    llm_output: str,
+    execution_status: str,
+    router_metrics: Optional[dict],
+) -> Optional[int]:
+    task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if not task:
+        return None
+
+    project = conn.execute("SELECT * FROM projects WHERE id = ?", (task["project_id"],)).fetchone()
+    metrics = router_metrics or {}
+    prompt_text = metrics.get("execution_prompt") or build_execution_prompt(build_task_input_from_rows(task, project or {}))
+    executed_at = metrics.get("executed_at") or now_iso()
+    mode = metrics.get("mode", "")
+    model = metrics.get("model") or metrics.get("model_used") or model_used
+    provider = metrics.get("provider") or metrics.get("provider_used") or ""
+    latency_ms = int(metrics.get("latency_ms") or 0)
+    estimated_cost = float(metrics.get("estimated_cost") or 0)
+    error_code = metrics.get("error_code") or ""
+    error_message = metrics.get("error_message") or ""
+    trace_json = json.dumps(metrics, ensure_ascii=False)
+    output_text = llm_output or ""
+    run_fingerprint = build_run_fingerprint(
+        task_id=task_id,
+        execution_status=execution_status,
+        model=model,
+        provider=provider,
+        prompt_text=prompt_text,
+        output_text=output_text,
+        error_code=error_code,
+        error_message=error_message,
+    )
+
+    existing = conn.execute(
+        """
+        SELECT id
+        FROM executions_history
+        WHERE task_id = ? AND run_fingerprint = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (task_id, run_fingerprint),
+    ).fetchone()
+    if existing:
+        return int(existing["id"])
+
+    cur = conn.execute(
+        """
+        INSERT INTO executions_history (
+            task_id, project_id, execution_status, mode, model, provider,
+            latency_ms, estimated_cost, prompt_text, output_text,
+            error_code, error_message, router_trace_json, run_fingerprint, executed_at, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            task_id,
+            task["project_id"],
+            execution_status,
+            mode,
+            model,
+            provider,
+            latency_ms,
+            estimated_cost,
+            prompt_text,
+            output_text,
+            error_code,
+            error_message,
+            trace_json,
+            run_fingerprint,
+            executed_at,
+            now_iso(),
+        ),
+    )
+    run_id = int(cur.lastrowid)
+
+    run_data = {
+        "execution_status": execution_status,
+        "mode": mode,
+        "model": model,
+        "provider": provider,
+        "latency_ms": latency_ms,
+        "estimated_cost": estimated_cost,
+        "prompt_text": prompt_text,
+        "output_text": output_text,
+        "error_code": error_code,
+        "error_message": error_message,
+        "router_trace": metrics,
+        "executed_at": executed_at,
+    }
+    paths = write_portable_run_artifacts(run_id, project or {}, task, run_data)
+    conn.execute(
+        """
+        UPDATE executions_history
+        SET artifact_md_path = ?, artifact_json_path = ?
+        WHERE id = ?
+        """,
+        (paths["md"], paths["json"], run_id),
+    )
+    return run_id
+
+
+def get_latest_execution_run(task_id: int) -> Optional[sqlite3.Row]:
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            SELECT *
+            FROM executions_history
+            WHERE task_id = ?
+            ORDER BY executed_at DESC, id DESC
+            LIMIT 1
+            """,
+            (task_id,),
+        ).fetchone()
+
+
+def trace_from_history_run(run) -> dict:
+    if not run:
+        return {}
+    trace = safe_json_loads(row_value(run, "router_trace_json"), {})
+    trace.update({
+        "mode": row_value(run, "mode"),
+        "model": row_value(run, "model"),
+        "provider": row_value(run, "provider"),
+        "latency_ms": row_value(run, "latency_ms", 0),
+        "estimated_cost": row_value(run, "estimated_cost", 0),
+        "status": row_value(run, "execution_status"),
+        "error_code": row_value(run, "error_code"),
+        "error_message": row_value(run, "error_message"),
+        "execution_prompt": row_value(run, "prompt_text"),
+    })
+    return normalize_trace(trace)
+
+
 def save_execution_result(
     task_id: int,
     model_used: str,
@@ -571,22 +1065,20 @@ def save_execution_result(
     llm_output: str,
     useful_extract: str,
     execution_status: str = "executed",  # "executed" (real), "preview" (demo), "failed" (error)
-    router_metrics: Optional[dict] = None  # Bloque E0: métricas estructuradas JSON
+    router_metrics: Optional[dict] = None  # Bloque E0: mÃ©tricas estructuradas JSON
 ) -> None:
     """
-    Guarda resultado de ejecución o propuesta previa con métricas estructuradas.
+    Guarda resultado de ejecuciÃ³n o propuesta previa con mÃ©tricas estructuradas.
 
     Args:
         task_id: ID de la tarea
         model_used: Modelo usado
-        router_summary: Resumen de decisión del Router
+        router_summary: Resumen de decisiÃ³n del Router
         llm_output: Output (real o demo)
-        useful_extract: Extracto para referencia rápida
-        execution_status: "executed" (ejecución real) | "preview" (propuesta previa sin Gemini) | "failed" (error)
+        useful_extract: Extracto para referencia rÃ¡pida
+        execution_status: "executed" (ejecuciÃ³n real) | "preview" (propuesta previa sin Gemini) | "failed" (error)
         router_metrics: Dict con mode, model, provider, latency_ms, estimated_cost, complexity_score, status, reasoning_path, executed_at
     """
-    import json
-
     # Serializar router_metrics a JSON (Bloque E0)
     metrics_json = json.dumps(router_metrics or {})
 
@@ -595,11 +1087,22 @@ def save_execution_result(
             """
             UPDATE tasks
             SET suggested_model = ?, router_summary = ?, llm_output = ?, useful_extract = ?,
-                status = ?, router_metrics_json = ?, updated_at = ?
+                status = ?, execution_status = ?, router_metrics_json = ?, updated_at = ?
             WHERE id = ?
             """,
-            (model_used, router_summary, llm_output, useful_extract, execution_status, metrics_json, now_iso(), task_id),
+            (model_used, router_summary, llm_output, useful_extract, execution_status, execution_status, metrics_json, now_iso(), task_id),
         )
+        try:
+            persist_execution_history(
+                conn=conn,
+                task_id=task_id,
+                model_used=model_used,
+                llm_output=llm_output,
+                execution_status=execution_status,
+                router_metrics=router_metrics or {},
+            )
+        except Exception as e:
+            print(f"[WARN] No se pudo persistir executions_history para task {task_id}: {e}")
 
 
 def update_task_result(task_id: int, llm_output: str, useful_extract: str) -> None:
@@ -607,7 +1110,7 @@ def update_task_result(task_id: int, llm_output: str, useful_extract: str) -> No
         conn.execute(
             """
             UPDATE tasks
-            SET llm_output = ?, useful_extract = ?, status = 'ejecutado', updated_at = ?
+            SET llm_output = ?, useful_extract = ?, status = 'executed', execution_status = 'executed', updated_at = ?
             WHERE id = ?
             """,
             (llm_output, useful_extract, now_iso(), task_id),
@@ -644,11 +1147,11 @@ def get_project_assets(project_id: int) -> List[sqlite3.Row]:
 # ==================== BLOQUE E1: RADAR SNAPSHOT LAYER ====================
 def build_radar_snapshot(internal: bool = False) -> dict:
     """
-    Construye snapshot del catálogo vivo (E1a: Snapshot Layer).
+    Construye snapshot del catÃ¡logo vivo (E1a: Snapshot Layer).
 
-    Esta es la FUENTE ÚNICA para Radar v1. Está diseñada para ser reutilizable:
+    Esta es la FUENTE ÃšNICA para Radar v1. EstÃ¡ diseÃ±ada para ser reutilizable:
     - Hoy: renderizada en vista Streamlit
-    - Mañana: exportable a JSON, API REST, dashboards externos
+    - MaÃ±ana: exportable a JSON, API REST, dashboards externos
 
     Responsabilidades:
     - Conectar a BD
@@ -678,11 +1181,11 @@ def build_radar_snapshot(internal: bool = False) -> dict:
         }
 
     NOTA IMPORTANTE: "Radar v1 = Live Catalog Snapshot"
-    - ✅ QUÉ está disponible hoy (providers, modelos, modos)
-    - ❌ NO es observatorio histórico
-    - ❌ NO es benchmarking
-    - ❌ NO es health monitor
-    - ❌ NO es scoring adaptativo
+    - âœ… QUÃ‰ estÃ¡ disponible hoy (providers, modelos, modos)
+    - âŒ NO es observatorio histÃ³rico
+    - âŒ NO es benchmarking
+    - âŒ NO es health monitor
+    - âŒ NO es scoring adaptativo
     """
     try:
         with get_conn() as conn:
@@ -1442,7 +1945,7 @@ def inject_css():
 
 
 def render_pwr_header():
-    """Renderiza header superior con navegación principal."""
+    """Renderiza header superior con navegaciÃ³n principal."""
     current_view = st.session_state.get("view", "home")
     col_brand, col_nav_init, col_nav_tasks, col_nav_projects, col_nav_radar, col_actions = st.columns([1.2, 1.2, 1.2, 1.5, 1.2, 2], gap="small")
     
@@ -1507,7 +2010,7 @@ def render_header():
             """
             <div class="card">
                 <h1 style="margin:0;">Portable Work Router</h1>
-                <div class="muted">Selecciona un proyecto, captura una tarea y conviértela en trabajo reusable.</div>
+                <div class="muted">Selecciona un proyecto, captura una tarea y conviÃ©rtela en trabajo reusable.</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1529,7 +2032,7 @@ def get_recent_executed_tasks(limit: int = 3) -> List[Dict]:
             t.updated_at, p.name as project_name
         FROM tasks t
         JOIN projects p ON t.project_id = p.id
-        WHERE t.llm_output IS NOT NULL AND t.llm_output != ''
+        WHERE COALESCE(NULLIF(t.execution_status, ''), t.status) = 'executed'
         ORDER BY t.updated_at DESC
         LIMIT ?
         """,
@@ -1567,7 +2070,7 @@ def get_projects_with_activity() -> List[Dict]:
 def format_time_ago(iso_string: str) -> str:
     """Convert ISO timestamp to human-readable 'time ago' format"""
     if not iso_string:
-        return "—"
+        return "â€”"
     try:
         from datetime import datetime
         dt = datetime.fromisoformat(iso_string)
@@ -1577,7 +2080,7 @@ def format_time_ago(iso_string: str) -> str:
         if diff.days > 7:
             return "Hace 1+ semanas"
         elif diff.days > 0:
-            return f"Hace {diff.days} día{'s' if diff.days > 1 else ''}"
+            return f"Hace {diff.days} dÃ­a{'s' if diff.days > 1 else ''}"
         elif diff.seconds > 3600:
             hours = diff.seconds // 3600
             return f"Hace {hours} hora{'s' if hours > 1 else ''}"
@@ -1592,18 +2095,18 @@ def format_time_ago(iso_string: str) -> str:
 
 def generate_demo_proposal(decision, task_input: "TaskInput") -> dict:
     """
-    Genera propuesta previa útil cuando no hay proveedor real.
+    Genera propuesta previa Ãºtil cuando no hay proveedor real.
 
-    No ejecuta nada. Solo usa el análisis del Router para mostrar:
-    - Qué ha entendido el sistema
-    - Cómo lo resolvería
+    No ejecuta nada. Solo usa el anÃ¡lisis del Router para mostrar:
+    - QuÃ© ha entendido el sistema
+    - CÃ³mo lo resolverÃ­a
     - Prioridades
     - Prompt sugerido
     - Estimaciones
 
     Args:
         decision: RoutingDecision del Router
-        task_input: TaskInput con titulo, descripción, contexto
+        task_input: TaskInput con titulo, descripciÃ³n, contexto
 
     Returns:
         dict con:
@@ -1619,7 +2122,7 @@ def generate_demo_proposal(decision, task_input: "TaskInput") -> dict:
             "cost_estimate": str
         }
     """
-    # Extraer información del RouterDecision y TaskInput
+    # Extraer informaciÃ³n del RouterDecision y TaskInput
     title = task_input.title.strip()
     description = task_input.description.strip()
     context = task_input.context.strip()
@@ -1627,15 +2130,15 @@ def generate_demo_proposal(decision, task_input: "TaskInput") -> dict:
 
     # Mapeos para estimaciones
     if mode == "eco":
-        time_estimate = "~2–4s"
+        time_estimate = "~2â€“4s"
         cost_estimate = "bajo"
-        mode_label = "rápido y preciso"
+        mode_label = "rÃ¡pido y preciso"
     else:  # racing
-        time_estimate = "~10–30s"
+        time_estimate = "~10â€“30s"
         cost_estimate = "medio-alto"
-        mode_label = "análisis profundo y detallado"
+        mode_label = "anÃ¡lisis profundo y detallado"
 
-    # Generar "Qué he entendido" (resumen natural de la tarea)
+    # Generar "QuÃ© he entendido" (resumen natural de la tarea)
     understood_parts = []
     if title:
         understood_parts.append(f"Quieres {title.lower()}")
@@ -1647,41 +2150,35 @@ def generate_demo_proposal(decision, task_input: "TaskInput") -> dict:
     understood = ", ".join(understood_parts) if understood_parts else "Analizar una tarea"
     understood = understood[0].upper() + understood[1:] + "."
 
-    # Generar "Cómo lo resolvería" basado en modo y señales
+    # Generar "CÃ³mo lo resolverÃ­a" basado en modo y seÃ±ales
     if mode == "eco":
-        strategy = f"Lo abordaría de forma rápida, enfocándome en lo esencial y devolviendo una respuesta clara y directa."
+        strategy = f"Lo abordarÃ­a de forma rÃ¡pida, enfocÃ¡ndome en lo esencial y devolviendo una respuesta clara y directa."
     else:
-        strategy = f"Lo abordaría con análisis profundo, considerando alternativas y devolviendo una recomendación fundamentada."
+        strategy = f"Lo abordarÃ­a con anÃ¡lisis profundo, considerando alternativas y devolviendo una recomendaciÃ³n fundamentada."
 
-    # Prioridades claras según modo
-    priority = "velocidad y claridad" if mode == "eco" else "precisión y profundidad"
+    # Prioridades claras segÃºn modo
+    priority = "velocidad y claridad" if mode == "eco" else "precisiÃ³n y profundidad"
 
     # Salida esperada (inferida del tipo de tarea)
     task_type = task_input.task_type or "Pensar"
     expected_output_map = {
-        "Pensar": "análisis estructurado con recomendaciones",
+        "Pensar": "anÃ¡lisis estructurado con recomendaciones",
         "Escribir": "contenido claro y listo para usar",
-        "Programar": "código funcional y documentado",
-        "Revisar": "evaluación con puntos de mejora",
-        "Decidir": "comparación de opciones con recomendación",
+        "Programar": "cÃ³digo funcional y documentado",
+        "Revisar": "evaluaciÃ³n con puntos de mejora",
+        "Decidir": "comparaciÃ³n de opciones con recomendaciÃ³n",
     }
     expected_output = expected_output_map.get(task_type, "respuesta clara y estructurada")
 
-    # Construir prompt sugerido
-    suggested_prompt = f"""{title}
-
-{description or ''}
-
-{f"Contexto: {context}" if context else ""}
-
-Ayúdame a resolver esto de forma clara y accionable.""".strip()
+    execution_prompt = build_execution_prompt(task_input)
 
     return {
         "understood": understood,
         "strategy": strategy,
         "priority": priority,
         "expected_output": expected_output,
-        "suggested_prompt": suggested_prompt,
+        "execution_prompt": execution_prompt,
+        "suggested_prompt": execution_prompt,
         "mode": mode,
         "model": decision.model,
         "time_estimate": time_estimate,
@@ -1694,8 +2191,8 @@ def display_demo_mode_panel(demo_proposal: dict) -> None:
     Muestra panel de propuesta previa cuando no hay proveedor real.
 
     Estructura:
-    - Qué he entendido
-    - Cómo lo resolvería
+    - QuÃ© he entendido
+    - CÃ³mo lo resolverÃ­a
     - Prompt sugerido
     - Para resultado real: configurar motor
 
@@ -1705,28 +2202,28 @@ def display_demo_mode_panel(demo_proposal: dict) -> None:
     st.write("")  # Espaciado
 
     # Header: Propuesta previa (no "demo", es preview operativa)
-    st.markdown("### ✨ Propuesta previa")
-    st.caption("La ejecución real requiere conectar un motor")
+    st.markdown("### âœ¨ Propuesta previa")
+    st.caption("La ejecuciÃ³n real requiere conectar un motor")
 
     st.write("")
 
-    # Bloque 1: Qué he entendido
-    st.markdown("**🧠 Qué he entendido**")
+    # Bloque 1: QuÃ© he entendido
+    st.markdown("**ðŸ§  QuÃ© he entendido**")
     st.write(demo_proposal["understood"])
 
     st.write("")
 
-    # Bloque 2: Cómo lo resolvería
-    st.markdown("**🎯 Cómo lo resolvería**")
+    # Bloque 2: CÃ³mo lo resolverÃ­a
+    st.markdown("**ðŸŽ¯ CÃ³mo lo resolverÃ­a**")
     st.write(demo_proposal["strategy"])
     st.caption(f"**Prioridad:** {demo_proposal['priority']}")
     st.caption(f"**Salida esperada:** {demo_proposal['expected_output']}")
 
     st.write("")
 
-    # Bloque 3: Prompt sugerido
-    st.markdown("**💬 Prompt sugerido**")
-    st.code(demo_proposal["suggested_prompt"], language="text")
+    # Bloque 3: contenido real que usaria la ejecucion
+    st.markdown("**Contenido de ejecucion**")
+    st.code(demo_proposal["execution_prompt"], language="text")
 
     st.write("")
 
@@ -1734,48 +2231,49 @@ def display_demo_mode_panel(demo_proposal: dict) -> None:
     st.info(
         f"**Modo:** {demo_proposal['mode'].upper()} | "
         f"**Modelo:** {demo_proposal['model']} | "
-        f"⏱️ {demo_proposal['time_estimate']} | "
-        f"💰 {demo_proposal['cost_estimate']}"
+        f"â±ï¸ {demo_proposal['time_estimate']} | "
+        f"ðŸ’° {demo_proposal['cost_estimate']}"
     )
 
     st.write("")
-    st.caption("Para generar el resultado real, conecta un motor en Configuración")
+    st.caption("Para generar el resultado real, conecta un motor en ConfiguraciÃ³n")
 
 
 def display_decision_preview(decision, task_title: str):
     """
-    Muestra la decisión del Router de forma clara y atractiva.
+    Muestra la decisiÃ³n del Router de forma clara y atractiva.
 
     Estructura:
-    💡 Cómo lo voy a resolver
+    ðŸ’¡ CÃ³mo lo voy a resolver
 
-    Modo recomendado: ECO (rápido) / RACING (análisis profundo)
+    Modo recomendado: ECO (rÃ¡pido) / RACING (anÃ¡lisis profundo)
     Motivo: [reasoning]
 
-    Tiempo estimado: ~2–4s / ~10–30s
+    Tiempo estimado: ~2â€“4s / ~10â€“30s
     Coste estimado: bajo / medio-alto
     """
     if not decision or not task_title.strip():
         return
 
-    mode_emoji = "🟢" if decision.mode == "eco" else "🔵"
-    mode_label = "ECO (rápido)" if decision.mode == "eco" else "RACING (análisis profundo)"
+    mode_emoji = "ðŸŸ¢" if decision.mode == "eco" else "ðŸ”µ"
+    mode_label = "ECO (rÃ¡pido)" if decision.mode == "eco" else "RACING (anÃ¡lisis profundo)"
 
     # Estimaciones basadas en modo
     if decision.mode == "eco":
-        time_est = "~2–4s"
+        time_est = "~2â€“4s"
         cost_level = "bajo"
     else:
-        time_est = "~10–30s"
+        time_est = "~10â€“30s"
         cost_level = "medio-alto"
 
     st.info("")  # Espaciado visual
-    st.markdown("### 💡 Cómo lo voy a resolver")
+    st.markdown("### ðŸ’¡ CÃ³mo lo voy a resolver")
     st.markdown(f"**Modo recomendado:** {mode_label}")
+    st.caption(f"Proveedor/modelo real: {decision.provider} / {decision.model}")
 
-    # Extraer motivo del reasoning_path (primera línea o primera oración)
+    # Extraer motivo del reasoning_path (primera lÃ­nea o primera oraciÃ³n)
     reasoning_lines = decision.reasoning_path.split("\n")
-    motivo = reasoning_lines[0] if reasoning_lines else "Decisión automática"
+    motivo = reasoning_lines[0] if reasoning_lines else "DecisiÃ³n automÃ¡tica"
     st.markdown(f"**Motivo:** {motivo}")
 
     st.write("")  # Espaciado
@@ -1783,20 +2281,52 @@ def display_decision_preview(decision, task_title: str):
     # Metadata: Tiempo y Coste (formato compacto)
     col1, col2 = st.columns(2)
     with col1:
-        st.caption(f"⏱️ Tiempo estimado: {time_est}")
+        st.caption(f"â±ï¸ Tiempo estimado: {time_est}")
     with col2:
-        st.caption(f"💰 Coste estimado: {cost_level}")
+        st.caption(f"ðŸ’° Coste estimado: {cost_level}")
+
+
+def display_execution_view(decision, task_input: TaskInput, execution_prompt: str, trace: Optional[dict] = None) -> None:
+    """Shows the same execution brief that the provider will receive."""
+    if not decision:
+        return
+
+    st.markdown("### Vista de ejecucion")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.caption(f"**Modo**\n{decision.mode}")
+    with col2:
+        st.caption(f"**Proveedor**\n{decision.provider}")
+    with col3:
+        st.caption(f"**Modelo**\n{decision.model}")
+
+    included = [
+        "contexto estable" if task_input.project_base_context.strip() else "sin contexto estable",
+        "instrucciones base" if task_input.project_base_instructions.strip() else "sin instrucciones base",
+        "contexto temporal" if task_input.context.strip() else "sin contexto temporal",
+    ]
+    st.caption("Incluye: " + " Â· ".join(included))
+
+    if trace and trace.get("status") and trace.get("status") != "pending":
+        status = trace.get("status")
+        latency = trace.get("latency_ms", 0)
+        cost = trace.get("estimated_cost", 0)
+        st.caption(f"Ultima ejecucion: {status} Â· ~{latency}ms Â· ${cost:.4f}")
+
+    with st.expander("Contenido que se ejecuta", expanded=False):
+        st.code(execution_prompt, language="text")
 
 
 def display_onboarding_result(result, task_input, is_first_execution: bool = True, project_name: str = None, task_name: str = None):
     """
-    H: Muestra resultado de ejecución con persistencia visible
+    H: Muestra resultado de ejecuciÃ³n con persistencia visible
 
     1. Resultado - contenido principal
-    2. "Guardado en" - sección clara y sobria (no célébración)
-    3. Acciones jerárquicas: Ver proyecto (PRIMARIA) > Reutilizar/Crear (SECUNDARIAS) > Copiar (TERCIARIA)
+    2. "Guardado en" - secciÃ³n clara y sobria (no cÃ©lÃ©braciÃ³n)
+    3. Acciones jerÃ¡rquicas: Ver proyecto (PRIMARIA) > Reutilizar/Crear (SECUNDARIAS) > Copiar (TERCIARIA)
 
-    Propósito: Cerrar con claridad, tranquilidad, persistencia visible y siguiente paso obvio
+    PropÃ³sito: Cerrar con claridad, tranquilidad, persistencia visible y siguiente paso obvio
     """
     if not result or result.status == "error":
         return
@@ -1804,16 +2334,16 @@ def display_onboarding_result(result, task_input, is_first_execution: bool = Tru
     st.write("")  # Espaciado
 
     # ==================== RESULTADO PRINCIPAL ====================
-    st.markdown("### 📋 Resultado")
+    st.markdown("### ðŸ“‹ Resultado")
     st.markdown(result.output_text)
 
     st.write("")  # Espaciado
 
     # ==================== BLOQUE: Guardado en (sobrio y tranquilizador) ====================
-    # Sección muy compacta, clara, sin celebración
+    # SecciÃ³n muy compacta, clara, sin celebraciÃ³n
     col1, col2 = st.columns([0.08, 0.92])
     with col1:
-        st.markdown("✅")
+        st.markdown("âœ…")
     with col2:
         st.markdown("**Guardado**")
 
@@ -1821,12 +2351,12 @@ def display_onboarding_result(result, task_input, is_first_execution: bool = Tru
         st.caption(f"En: **{project_name[:40]}**")
         st.caption(f"Tarea: **{task_name[:50]}**")
 
-    st.write("")  # Espaciado pequeño
+    st.write("")  # Espaciado pequeÃ±o
 
-    # ==================== ACCIÓN PRIMARIA: Ver en proyecto ====================
-    # CTA clara que guía sin aplastar el resultado
-    if st.button("📂 Ver en proyecto", use_container_width=True, type="primary", key="result_view_project"):
-        # Guarda datos para que home/project_view sepan dónde ir
+    # ==================== ACCIÃ“N PRIMARIA: Ver en proyecto ====================
+    # CTA clara que guÃ­a sin aplastar el resultado
+    if st.button("ðŸ“‚ Ver en proyecto", use_container_width=True, type="primary", key="result_view_project"):
+        # Guarda datos para que home/project_view sepan dÃ³nde ir
         if "project_id" in st.session_state.get("onboard_result", {}):
             st.session_state["active_project_id"] = st.session_state["onboard_result"]["project_id"]
         st.session_state["view"] = "home"
@@ -1834,13 +2364,13 @@ def display_onboarding_result(result, task_input, is_first_execution: bool = Tru
 
     st.write("")  # Espaciado
 
-    # ==================== ACCIONES SECUNDARIAS: Más opciones ====================
-    st.caption("Más acciones:")
+    # ==================== ACCIONES SECUNDARIAS: MÃ¡s opciones ====================
+    st.caption("MÃ¡s acciones:")
 
     col1, col2 = st.columns(2, gap="small")
 
     with col1:
-        if st.button("🔄 Usar como contexto", use_container_width=True, key="result_use_context"):
+        if st.button("ðŸ”„ Usar como contexto", use_container_width=True, key="result_use_context"):
             # Guarda resultado para pasar como contexto a nueva tarea
             extract = result.output_text[:500]
             st.session_state["context_from_result"] = extract
@@ -1848,17 +2378,17 @@ def display_onboarding_result(result, task_input, is_first_execution: bool = Tru
             st.rerun()
 
     with col2:
-        if st.button("🎯 Crear tarea relacionada", use_container_width=True, key="result_create_related"):
+        if st.button("ðŸŽ¯ Crear tarea relacionada", use_container_width=True, key="result_create_related"):
             # Abre new_task en el proyecto actual
             if "project_id" in st.session_state.get("onboard_result", {}):
                 st.session_state["active_project_id"] = st.session_state["onboard_result"]["project_id"]
             st.session_state["view"] = "new_task"
             st.rerun()
 
-    st.write("")  # Espaciado pequeño
+    st.write("")  # Espaciado pequeÃ±o
 
-    # ==================== ACCIÓN TERCIARIA: Copiar (expandible, discreta) ====================
-    with st.expander("📋 Copiar resultado", expanded=False):
+    # ==================== ACCIÃ“N TERCIARIA: Copiar (expandible, discreta) ====================
+    with st.expander("ðŸ“‹ Copiar resultado", expanded=False):
         extract = result.output_text[:700]
         st.text_area("",
                      value=extract,
@@ -1868,21 +2398,21 @@ def display_onboarding_result(result, task_input, is_first_execution: bool = Tru
         st.caption("Selecciona y copia el texto que necesites")
 
 
-# ════════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # BLOQUE E1: RADAR SNAPSHOT LAYER + VISTA
-# ════════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # Snapshot function: Aislada, limpia, reutilizable
-# Preparada para extraer a módulo propio si es necesario (E2+)
-# ════════════════════════════════════════════════════════════════════════════════
+# Preparada para extraer a mÃ³dulo propio si es necesario (E2+)
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def build_radar_snapshot(internal: bool = False) -> dict:
     """
-    Construye snapshot del catálogo vivo (E1a - Snapshot Layer).
+    Construye snapshot del catÃ¡logo vivo (E1a - Snapshot Layer).
 
     Responsabilidades:
     - Conectar a BD
     - Instanciar ModelCatalog desde datos vivos
-    - Exportar catálogo con filtrado de is_internal
+    - Exportar catÃ¡logo con filtrado de is_internal
     - Envolver con metadata clara
 
     Args:
@@ -1893,18 +2423,18 @@ def build_radar_snapshot(internal: bool = False) -> dict:
         Dict con estructura:
         {
             "status": "ok" | "error",
-            "radar": {...},        # Catálogo vivo
+            "radar": {...},        # CatÃ¡logo vivo
             "metadata": {...}      # Metadata y framing
         }
 
-    NOTA: Esta función es REUTILIZABLE para:
+    NOTA: Esta funciÃ³n es REUTILIZABLE para:
     - Renderizar en Streamlit (E1b)
     - Exportar a JSON (E2+)
     - Consumir en API REST (E3+)
-    Sin cambios de lógica, solo transporte.
+    Sin cambios de lÃ³gica, solo transporte.
 
     Bloque E1: Live Catalog Snapshot
-    ═════════════════════════════════════════════════════════════════════
+    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     """
     try:
         with get_conn() as conn:
@@ -1918,7 +2448,7 @@ def build_radar_snapshot(internal: bool = False) -> dict:
                 "generated_at": now_iso(),
                 "radar_version": "1.0",
                 "catalog_source": "model_catalog BD",
-                "framing": "live catalog snapshot – NOT observatorio histórico, NOT benchmarking, NOT health monitor, NOT adaptive scoring",
+                "framing": "live catalog snapshot â€“ NOT observatorio histÃ³rico, NOT benchmarking, NOT health monitor, NOT adaptive scoring",
                 "note": "Mode = temporal bridge to router_policy table (future)",
                 "include_internal": internal
             }
@@ -1936,10 +2466,10 @@ def build_radar_snapshot(internal: bool = False) -> dict:
 
 def radar_view() -> None:
     """
-    Vista Streamlit: Radar v1 - Catálogo vivo visible (E1b).
+    Vista Streamlit: Radar v1 - CatÃ¡logo vivo visible (E1b).
 
     Estructura minimalista con narrativa de producto:
-    - Encabezado + explicación clara
+    - Encabezado + explicaciÃ³n clara
     - Resumen: providers, modelos, modos
     - Listado detallado por provider
     - Metadata transparente
@@ -1947,18 +2477,18 @@ def radar_view() -> None:
     # ==================== ENCABEZADO ====================
     col1, col2 = st.columns([0.1, 0.9])
     with col1:
-        st.write("📡")
+        st.write("ðŸ“¡")
     with col2:
         st.title("Radar")
 
     st.markdown("""
-    **Catálogo vivo de PWR** — Qué modelos y modos tiene PWR para ayudarte a decidir cómo abordar tareas.
+    **CatÃ¡logo vivo de PWR** â€” QuÃ© modelos y modos tiene PWR para ayudarte a decidir cÃ³mo abordar tareas.
 
-    Aquí ves la configuración en tiempo real que PWR consulta para elegir
-    el modelo más adecuado (eco: rápido/barato, racing: potente/caro).
+    AquÃ­ ves la configuraciÃ³n en tiempo real que PWR consulta para elegir
+    el modelo mÃ¡s adecuado (eco: rÃ¡pido/barato, racing: potente/caro).
 
-    ⚠️ Esto NO es observatorio histórico. NO ves cuándo se usó cada modelo.
-    Solo el catálogo de disponibilidad.
+    âš ï¸ Esto NO es observatorio histÃ³rico. NO ves cuÃ¡ndo se usÃ³ cada modelo.
+    Solo el catÃ¡logo de disponibilidad.
     """)
 
     st.divider()
@@ -1966,72 +2496,72 @@ def radar_view() -> None:
     # ==================== SNAPSHOT ====================
     # Controlar si mostrar internos
     show_internal = st.checkbox(
-        "🔧 Mostrar modelos internos (debug)",
+        "ðŸ”§ Mostrar modelos internos (debug)",
         value=False,
         help="Modelos mock/test solo para desarrollo"
     )
 
-    # Construir snapshot (función reutilizable)
+    # Construir snapshot (funciÃ³n reutilizable)
     snapshot = build_radar_snapshot(internal=show_internal)
 
     if snapshot["status"] != "ok":
-        st.error(f"⚠️ Error: {snapshot.get('error', 'Unknown error')}")
+        st.error(f"âš ï¸ Error: {snapshot.get('error', 'Unknown error')}")
         return
 
     radar_data = snapshot["radar"]
     metadata = snapshot["metadata"]
 
     # ==================== RESUMEN ====================
-    st.subheader("📊 Resumen")
+    st.subheader("ðŸ“Š Resumen")
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("🔌 Providers", radar_data["summary"]["total_providers"])
+        st.metric("ðŸ”Œ Providers", radar_data["summary"]["total_providers"])
     with col2:
-        st.metric("🤖 Modelos", radar_data["summary"]["total_models"])
+        st.metric("ðŸ¤– Modelos", radar_data["summary"]["total_models"])
     with col3:
-        st.metric("⚙️ Modos", len(radar_data["summary"]["modes_list"]))
+        st.metric("âš™ï¸ Modos", len(radar_data["summary"]["modes_list"]))
     with col4:
-        st.metric("📌 Por defecto", radar_data["summary"]["default_mode"])
+        st.metric("ðŸ“Œ Por defecto", radar_data["summary"]["default_mode"])
 
     st.write("")
 
     # ==================== PROVIDERS ====================
-    st.subheader("🔌 Providers y Modelos")
+    st.subheader("ðŸ”Œ Providers y Modelos")
 
     for provider_name in sorted(radar_data["providers"].keys()):
         provider = radar_data["providers"][provider_name]
 
-        with st.expander(f"**{provider_name.upper()}** · {len(provider['models'])} modelo(s)", expanded=True):
+        with st.expander(f"**{provider_name.upper()}** Â· {len(provider['models'])} modelo(s)", expanded=True):
             for idx, model in enumerate(provider["models"]):
                 # Header: nombre + status + internal badge
                 col1, col2, col3 = st.columns([0.5, 0.25, 0.25])
 
                 with col1:
-                    status_emoji = "🟢" if model["status"] == "active" else "🟡"
+                    status_emoji = "ðŸŸ¢" if model["status"] == "active" else "ðŸŸ¡"
                     internal_badge = " **[INTERNAL]**" if model["is_internal"] else ""
                     st.markdown(f"{status_emoji} **{model['name']}{internal_badge}**")
 
                 with col2:
-                    st.caption(f"📌 {model['mode'].upper()}")
+                    st.caption(f"ðŸ“Œ {model['mode'].upper()}")
 
                 with col3:
-                    st.caption(f"💰 ${model['estimated_cost_per_run']:.3f}")
+                    st.caption(f"ðŸ’° ${model['estimated_cost_per_run']:.3f}")
 
                 # Capabilities badges
                 caps = model.get("capabilities", {})
                 badges = []
                 if caps.get("vision"):
-                    badges.append("👁️ Vision")
+                    badges.append("ðŸ‘ï¸ Vision")
                 if caps.get("reasoning"):
-                    badges.append("🧠 Reasoning")
+                    badges.append("ðŸ§  Reasoning")
                 if caps.get("code_execution"):
-                    badges.append("💻 Code")
+                    badges.append("ðŸ’» Code")
 
                 if badges:
-                    st.caption("Capacidades: " + " · ".join(badges))
+                    st.caption("Capacidades: " + " Â· ".join(badges))
                 else:
-                    st.caption("Capacidades: —")
+                    st.caption("Capacidades: â€”")
 
                 # Context window
                 st.caption(f"Context window: {model['context_window']:,} tokens")
@@ -2043,7 +2573,7 @@ def radar_view() -> None:
     st.write("")
 
     # ==================== MODES ====================
-    st.subheader("⚙️ Modos de Ejecución")
+    st.subheader("âš™ï¸ Modos de EjecuciÃ³n")
 
     for mode_name in radar_data["summary"]["modes_list"]:
         mode = radar_data["modes"][mode_name]
@@ -2059,12 +2589,12 @@ def radar_view() -> None:
 
     col1, col2 = st.columns([0.7, 0.3])
     with col1:
-        st.caption(f"🕐 Generado: {metadata['generated_at']}")
-        st.caption(f"📌 Versión: {metadata['radar_version']} · Fuente: {metadata['catalog_source']}")
+        st.caption(f"ðŸ• Generado: {metadata['generated_at']}")
+        st.caption(f"ðŸ“Œ VersiÃ³n: {metadata['radar_version']} Â· Fuente: {metadata['catalog_source']}")
 
     with col2:
         if show_internal:
-            st.warning("⚠️ Modelos internos incluidos", icon="🔧")
+            st.warning("âš ï¸ Modelos internos incluidos", icon="ðŸ”§")
 
     st.markdown(f"*{metadata['framing']}*")
     st.markdown(f"*Nota: {metadata['note']}*")
@@ -2074,54 +2604,54 @@ def onboarding_view():
     """
     ESTADO A: Onboarding puro (usuario nuevo, sin actividad previa)
     - INPUT es protagonista visual (primer elemento)
-    - Microfrase mínima de contexto (no explicación larga)
+    - Microfrase mÃ­nima de contexto (no explicaciÃ³n larga)
     - Ejemplos como sugerencias de tarea
     - Preview condicional (solo si input tiene suficiente sentido)
-    - Flujo automático: escribir → ver propuesta → ejecutar → resultado
+    - Flujo automÃ¡tico: escribir â†’ ver propuesta â†’ ejecutar â†’ resultado
     """
     # Inicializar ExecutionService para decisiones
     with get_conn() as conn:
         execution_service = ExecutionService(conn)
 
     # ==================== INPUT PROTAGONISTA ====================
-    st.markdown("**¿Cuál es tu tarea?**")
+    st.markdown("**Â¿CuÃ¡l es tu tarea?**")
 
     capture_title = st.text_area(
         "",
-        placeholder="Resume un documento • Escribe un email • Analiza un gráfico • Propón un plan",
+        placeholder="Resume un documento â€¢ Escribe un email â€¢ Analiza un grÃ¡fico â€¢ PropÃ³n un plan",
         key="onboard_capture_input",
         height=120,
         label_visibility="collapsed"
     )
 
-    # Microfrase mínima (no protagonista, contexto ligero)
+    # Microfrase mÃ­nima (no protagonista, contexto ligero)
     st.caption("PWR elige el mejor modelo para tu tarea")
 
     # ==================== EJEMPLOS COMO SUGERENCIAS ====================
     if not capture_title.strip():
-        st.caption("💡 Sugerencias: resume este documento, escribe un email, analiza un gráfico")
+        st.caption("ðŸ’¡ Sugerencias: resume este documento, escribe un email, analiza un grÃ¡fico")
 
-    st.write("")  # Espaciado pequeño
+    st.write("")  # Espaciado pequeÃ±o
 
     # ==================== PREVIEW CONDICIONAL (solo si input tiene sentido) ====================
     # Preview aparece si input tiene al menos ~20 caracteres (suficiente para ser tarea clara)
     if capture_title.strip() and len(capture_title.strip()) >= 15:
-        task_input = TaskInput(
+        task_input = build_task_input(
             task_id=0,
             title=capture_title.strip(),
             description="",
             task_type="Pensar",
             context="",
-            project_name="",
+            project={},
         )
         try:
             decision = execution_service.decision_engine.decide(task_input)
             display_decision_preview(decision, capture_title)
 
-            st.write("")  # Espaciado pequeño
+            st.write("")  # Espaciado pequeÃ±o
 
-            # ==================== BOTÓN (solo si preview mostrado) ====================
-            if st.button("✨ Empezar", use_container_width=True,
+            # ==================== BOTÃ“N (solo si preview mostrado) ====================
+            if st.button("âœ¨ Empezar", use_container_width=True,
                          key="onboard_capture_btn", type="primary"):
                 # Crear proyecto default
                 projects = get_projects()
@@ -2145,19 +2675,13 @@ def onboarding_view():
                     description="",
                     task_type="Pensar",
                     context="",
-                    file=None
+                    uploaded_files=None
                 )
 
                 # Ejecutar
                 task = get_task(task_id)
-                task_input = TaskInput(
-                    task_id=task["id"],
-                    title=task["title"],
-                    description="",
-                    task_type="Pensar",
-                    context="",
-                    project_name="Mi primer proyecto" if not projects else projects[0]["name"],
-                )
+                execution_project = get_project(default_project_id)
+                task_input = build_task_input_from_rows(task, execution_project)
 
                 progress_placeholder = st.empty()
                 status_messages = [
@@ -2167,7 +2691,7 @@ def onboarding_view():
                 ]
 
                 for idx, msg in enumerate(status_messages):
-                    progress_placeholder.info(f"⏳ {msg}")
+                    progress_placeholder.info(f"â³ {msg}")
                     import time
                     time.sleep(0.3)
 
@@ -2179,7 +2703,7 @@ def onboarding_view():
                         output = execution_result.output_text
                         extract = output[:700]
                         router_summary = (
-                            f"Ejecución completada\n"
+                            f"EjecuciÃ³n completada\n"
                             f"Modo: {execution_result.routing.mode}\n"
                             f"Modelo: {execution_result.metrics.model_used}\n"
                             f"Motivo:\n- {execution_result.routing.reasoning_path}"
@@ -2194,8 +2718,13 @@ def onboarding_view():
                     router_metrics = {
                         "mode": execution_result.routing.mode,
                         "model": execution_result.metrics.model_used,
+                        "provider": execution_result.metrics.provider_used,
                         "complexity_score": execution_result.routing.complexity_score,
                         "status": execution_status,
+                        "reasoning_path": execution_result.routing.reasoning_path,
+                        "execution_prompt": build_execution_prompt(task_input),
+                        "error_code": execution_result.error.code if execution_result.error else "",
+                        "error_message": execution_result.error.message if execution_result.error else "",
                     }
 
                     save_execution_result(
@@ -2215,19 +2744,20 @@ def onboarding_view():
                         "task": task,
                         "result": execution_result,
                     }
+                    open_task_workspace(default_project_id, task_id)
 
                     st.rerun()
 
                 except Exception as e:
                     progress_placeholder.empty()
-                    st.error(f"Error en ejecución: {str(e)}")
+                    st.error(f"Error en ejecuciÃ³n: {str(e)}")
 
         except Exception as e:
-            st.caption(f"⚠️ No se pudo analizar: {str(e)[:50]}...")
+            st.caption(f"âš ï¸ No se pudo analizar: {str(e)[:50]}...")
 
     # ==================== RESULTADO (solo si completado) ====================
     if st.session_state.get("onboard_result_ready"):
-        st.write("")  # Espaciado pequeño
+        st.write("")  # Espaciado pequeÃ±o
         onboard_data = st.session_state.get("onboard_result", {})
         if onboard_data:
             result = onboard_data.get("result")
@@ -2235,16 +2765,16 @@ def onboarding_view():
             project_id = onboard_data.get("project_id")
             project = get_project(project_id) if project_id else None
             project_name = project["name"] if project else "Mi primer proyecto"
-            # task es sqlite3.Row, usar indexación directa en lugar de .get()
+            # task es sqlite3.Row, usar indexaciÃ³n directa en lugar de .get()
             task_name = task["title"] if task else ""
             display_onboarding_result(result, task, is_first_execution=True, project_name=project_name, task_name=task_name)
 
 
 def new_task_view():
     """
-    ESTADO B: Nueva tarea — flujo lineal dedicado
-    - Flujo lineal explícito: 1. ¿Qué necesitas? → 2. Propuesta → 3. Detalles → 4. Ejecuta
-    - Botón "Volver" discreto
+    ESTADO B: Nueva tarea â€” flujo lineal dedicado
+    - Flujo lineal explÃ­cito: 1. Â¿QuÃ© necesitas? â†’ 2. Propuesta â†’ 3. Detalles â†’ 4. Ejecuta
+    - BotÃ³n "Volver" discreto
     - Sin "Retoma tu trabajo" ni "Tus proyectos"
     """
     # Inicializar ExecutionService
@@ -2254,12 +2784,12 @@ def new_task_view():
     projects = get_projects()
     default_project = projects[0] if projects else None
 
-    # Header: Título + Volver (discreto)
+    # Header: TÃ­tulo + Volver (discreto)
     col1, col2 = st.columns([0.85, 0.15])
     with col1:
-        st.markdown("### ¿Qué necesitas hacer ahora?")
+        st.markdown("### Â¿QuÃ© necesitas hacer ahora?")
     with col2:
-        if st.button("← Volver", key="new_task_back", use_container_width=True):
+        if st.button("â† Volver", key="new_task_back", use_container_width=True):
             st.session_state["view"] = "home"
             st.session_state["home_capture_input"] = ""
             st.rerun()
@@ -2269,12 +2799,12 @@ def new_task_view():
 
     st.write("")  # Espaciado
 
-    # ==================== PASO 1: ¿QUÉ NECESITAS? ====================
-    st.markdown("### 1. ¿Qué necesitas?")
+    # ==================== PASO 1: Â¿QUÃ‰ NECESITAS? ====================
+    st.markdown("### 1. Â¿QuÃ© necesitas?")
 
     capture_title = st.text_area(
         "",
-        placeholder="Ej: resume este documento • escribe un email • analiza un excel • propón un plan",
+        placeholder="Ej: resume este documento â€¢ escribe un email â€¢ analiza un excel â€¢ propÃ³n un plan",
         key="home_capture_input",
         height=90,
         label_visibility="collapsed"
@@ -2282,17 +2812,17 @@ def new_task_view():
 
     st.write("")  # Espaciado
 
-    # ==================== PASO 2: CÓMO LO VAMOS A RESOLVER (automático) ====================
+    # ==================== PASO 2: CÃ“MO LO VAMOS A RESOLVER (automÃ¡tico) ====================
     if capture_title.strip():
-        st.markdown("### 2. Cómo lo vamos a resolver")
+        st.markdown("### 2. CÃ³mo lo vamos a resolver")
 
-        task_input = TaskInput(
+        task_input = build_task_input(
             task_id=0,
             title=capture_title.strip(),
             description="",
             task_type="Pensar",
             context="",
-            project_name=default_project['name'] if default_project else "",
+            project=default_project or {},
         )
         try:
             decision = execution_service.decision_engine.decide(task_input)
@@ -2306,10 +2836,10 @@ def new_task_view():
         st.markdown("### 3. Detalles (opcional)")
 
         context = ""
-        with st.expander("Añadir contexto"):
+        with st.expander("AÃ±adir contexto"):
             context = st.text_area(
                 "",
-                placeholder="Información relevante para ejecutar la tarea...",
+                placeholder="InformaciÃ³n relevante para ejecutar la tarea...",
                 height=60,
                 key="home_task_context",
                 label_visibility="collapsed"
@@ -2320,18 +2850,17 @@ def new_task_view():
         # ==================== PASO 4: EJECUTA ====================
         st.markdown("### 4. Ejecuta")
 
-        if st.button("✨ Generar propuesta", use_container_width=True, key="home_capture_btn",
+        if st.button("âœ¨ Generar propuesta", use_container_width=True, key="home_capture_btn",
                      disabled=not default_project, type="primary"):
             if default_project and capture_title.strip():
                 tid = create_task(default_project["id"], capture_title, "", TIPOS_TAREA[0], context or "", None)
-                st.session_state["selected_task_id"] = tid
-                st.success(f"✓ Tarea capturada")
+                open_task_workspace(default_project["id"], tid)
                 st.rerun()
 
 
 def home_view():
     """
-    ESTADO C: Home de trabajo — navegación limpia
+    ESTADO C: Home de trabajo â€” navegaciÃ³n limpia
     - Dos opciones claras: retomar trabajo O crear algo nuevo
     - Si no hay actividad: llama onboarding_view()
     - Si hay actividad: muestra tareas recientes y proyectos
@@ -2346,12 +2875,12 @@ def home_view():
         onboarding_view()
         return
 
-    # ESTADO C: Navegación de trabajo
-    st.markdown("### 🏠 Mis tareas")
+    # ESTADO C: NavegaciÃ³n de trabajo
+    st.markdown("### ðŸ  Mis tareas")
 
     st.write("")  # Espaciado
 
-    # ==================== SECCIÓN: HOY (Historial del día) ====================
+    # ==================== SECCIÃ“N: HOY (Historial del dÃ­a) ====================
     st.markdown("#### Hoy")
 
     today_tasks = []
@@ -2366,38 +2895,36 @@ def home_view():
             FROM tasks t
             LEFT JOIN projects p ON p.id = t.project_id
             WHERE date(t.updated_at) = date('now', 'localtime')
-              AND t.llm_output IS NOT NULL
-              AND TRIM(t.llm_output) != ''
+              AND COALESCE(NULLIF(t.execution_status, ''), t.status) = 'executed'
             ORDER BY t.updated_at DESC
             LIMIT 5
         """)
         today_tasks = [dict(row) for row in cursor.fetchall()]
 
     if not today_tasks:
-        st.caption("📋 Sin ejecuciones hoy")
+        st.caption("ðŸ“‹ Sin ejecuciones hoy")
     else:
         for task in today_tasks:
             time_ago = format_time_ago(task.get("updated_at", ""))
             col1, col2 = st.columns([0.85, 0.15])
             with col1:
-                st.markdown(f"✅ **{task['title'][:45]}**")
+                st.markdown(f"âœ… **{task['title'][:45]}**")
                 project_name = task.get('project_name') or "Sin proyecto"
-                st.caption(f"{project_name} · {time_ago}")
+                st.caption(f"{project_name} Â· {time_ago}")
             with col2:
-                if st.button("→", key=f"home_today_{task['id']}", help="Abrir", use_container_width=True):
-                    st.session_state["active_project_id"] = task["project_id"]
-                    st.session_state["selected_task_id"] = task["id"]
+                if st.button("â†’", key=f"home_today_{task['id']}", help="Abrir", use_container_width=True):
+                    open_task_workspace(task["project_id"], task["id"])
                     st.rerun()
 
     st.divider()
 
-    # ==================== OPCIÓN 1: RETOMAR TRABAJO ====================
+    # ==================== OPCIÃ“N 1: RETOMAR TRABAJO ====================
     st.markdown("#### Trabajo en progreso")
 
     recent_tasks = get_recent_executed_tasks(limit=5)
 
     if not recent_tasks:
-        st.caption("📋 Sin tareas ejecutadas aún. Captura una para comenzar.")
+        st.caption("ðŸ“‹ Sin tareas ejecutadas aÃºn. Captura una para comenzar.")
     else:
         cols_per_row = 3
         for i in range(0, len(recent_tasks), cols_per_row):
@@ -2405,32 +2932,32 @@ def home_view():
             for j, task in enumerate(recent_tasks[i:i+cols_per_row]):
                 with cols[j]:
                     time_ago = format_time_ago(task.get("updated_at", ""))
-                    st.markdown(f"**📌 {task['title'][:40]}**")
-                    st.caption(f"{task['project_name']} · {time_ago}")
+                    st.markdown(f"**ðŸ“Œ {task['title'][:40]}**")
+                    st.caption(f"{task['project_name']} Â· {time_ago}")
                     if st.button("Continuar", key=f"home_continue_{task['id']}", use_container_width=True):
-                        st.session_state["active_project_id"] = task["project_id"]
-                        st.session_state["selected_task_id"] = task["id"]
+                        open_task_workspace(task["project_id"], task["id"])
                         st.rerun()
 
     st.divider()
 
-    # ==================== OPCIÓN 2: CREAR ALGO NUEVO ====================
+    # ==================== OPCIÃ“N 2: CREAR ALGO NUEVO ====================
     st.markdown("#### Mis proyectos")
 
     projects_with_activity = get_projects_with_activity()
 
     if not projects_with_activity:
-        st.caption("📁 Sin proyectos. Crea uno para comenzar.")
+        st.caption("ðŸ“ Sin proyectos. Crea uno para comenzar.")
     else:
         cols_per_row = 2
         for i in range(0, len(projects_with_activity), cols_per_row):
             cols = st.columns(cols_per_row)
             for j, project in enumerate(projects_with_activity[i:i+cols_per_row]):
                 with cols[j]:
-                    st.markdown(f"**📁 {project['name'][:30]}**")
+                    st.markdown(f"**ðŸ“ {project['name'][:30]}**")
                     st.caption(f"{project['active_task_count']} tareas")
                     if st.button("Abrir", key=f"home_open_project_{project['id']}", use_container_width=True):
                         st.session_state["active_project_id"] = project["id"]
+                        st.session_state["view"] = "project_view"
                         st.rerun()
 
     st.write("")
@@ -2441,12 +2968,12 @@ def home_view():
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("➕ Nueva tarea", use_container_width=True, key="home_new_task_btn", type="primary"):
+        if st.button("âž• Nueva tarea", use_container_width=True, key="home_new_task_btn", type="primary"):
             st.session_state["view"] = "new_task"
             st.rerun()
 
     with col2:
-        if st.button("➕ Crear proyecto", use_container_width=True, key="home_create_new"):
+        if st.button("âž• Crear proyecto", use_container_width=True, key="home_create_new"):
             st.session_state["show_create_project"] = True
             st.rerun()
 
@@ -2459,9 +2986,9 @@ def home_view():
 
         with st.form("create_project_form"):
             name = st.text_input("Nombre", placeholder="Mi proyecto")
-            description = st.text_area("Descripción", height=60, placeholder="Breve resumen...")
-            objective = st.text_area("Objetivo", height=60, placeholder="¿Qué quiero lograr?")
-            base_context = st.text_area("Contexto", height=80, placeholder="Referencias útiles...")
+            description = st.text_area("DescripciÃ³n", height=60, placeholder="Breve resumen...")
+            objective = st.text_area("Objetivo", height=60, placeholder="Â¿QuÃ© quiero lograr?")
+            base_context = st.text_area("Contexto", height=80, placeholder="Referencias Ãºtiles...")
             base_instructions = st.text_area("Reglas", height=80, placeholder="Criterios estables...")
             tags = st.text_input("Etiquetas", placeholder="producto, ia, trabajo")
             files = st.file_uploader("Documentos", accept_multiple_files=True)
@@ -2474,6 +3001,8 @@ def home_view():
                 else:
                     pid = create_project(name, description, objective, base_context, base_instructions, tags, files)
                     st.session_state["active_project_id"] = pid
+                    st.session_state["selected_task_id"] = None
+                    st.session_state["view"] = "project_view"
                     st.session_state["show_create_project"] = False
                     st.rerun()
 
@@ -2486,6 +3015,12 @@ def project_view():
     """
     pid = st.session_state.get("active_project_id")
     if not pid:
+        selected_tid = st.session_state.get("selected_task_id")
+        if selected_tid:
+            selected_task = get_task(selected_tid)
+            if selected_task:
+                open_task_workspace(selected_task["project_id"], selected_task["id"])
+                st.rerun()
         st.info("Selecciona un proyecto.")
         return
 
@@ -2520,18 +3055,18 @@ def project_view():
 
     # ==================== SIDEBAR ====================
     with sidebar:
-        # Proyecto como hint (automático, no decisión)
+        # Proyecto como hint (automÃ¡tico, no decisiÃ³n)
         st.caption(f"Trabajando en: **{project['name']}**")
 
         st.write("")  # Espaciado
 
         # MARKDOWN: Titular claro
-        st.markdown("## ¿Qué necesitas hacer ahora?")
+        st.markdown("## Â¿QuÃ© necesitas hacer ahora?")
 
         # INPUT PROTAGONISTA (text_area, 110px)
         title = st.text_area(
             "",
-            placeholder="Ej: resume este documento • escribe un email • analiza un excel • propón un plan estratégico",
+            placeholder="Ej: resume este documento â€¢ escribe un email â€¢ analiza un excel â€¢ propÃ³n un plan estratÃ©gico",
             key=f"title_{pid}",
             height=110,
             label_visibility="collapsed"
@@ -2543,13 +3078,13 @@ def project_view():
 
         # ==================== DECISION PREVIA ====================
         if title.strip():
-            task_input = TaskInput(
+            task_input = build_task_input(
                 task_id=0,
                 title=title.strip(),
                 description="",
                 task_type="Pensar",
                 context="",
-                project_name=project['name'],
+                project=project,
             )
             try:
                 decision = execution_service.decision_engine.decide(task_input)
@@ -2561,74 +3096,59 @@ def project_view():
 
         # CONTEXTO PROGRESIVO: Opcional, cerrado por defecto
         context = ""
-        with st.expander("Añadir contexto (opcional)", expanded=False):
+        with st.expander("AÃ±adir contexto (opcional)", expanded=False):
             context = st.text_area(
                 "",
                 height=60,
-                placeholder="Información relevante para ejecutar la tarea...",
+                placeholder="InformaciÃ³n relevante para ejecutar la tarea...",
                 key=f"ctx_task_{pid}",
                 label_visibility="collapsed"
             )
 
         st.write("")  # Espaciado
 
-        # BOTÓN ÚNICO
+        # BOTÃ“N ÃšNICO
         if st.button("Generar propuesta", use_container_width=True, key=f"create_task_{pid}", disabled=not title.strip()):
             if title.strip():
                 tid = create_task(pid, title, "", TIPOS_TAREA[0], context or "", None)
-                st.session_state["selected_task_id"] = tid
+                open_task_workspace(pid, tid)
                 st.rerun()
 
         st.write("")  # Espaciado
 
-        # LISTA DE TAREAS — Separadas en Ejecutadas vs Pendientes (H: Persistencia Visible)
+        # LISTA DE TAREAS â€” Separadas en Ejecutadas vs Pendientes (H: Persistencia Visible)
         st.markdown(f"### Tareas ({len(tasks)})")
 
-        search = st.text_input("Buscar", placeholder="Título o descripción...", key=f"search_{pid}", label_visibility="collapsed")
+        search = st.text_input("Buscar", placeholder="TÃ­tulo o descripciÃ³n...", key=f"search_{pid}", label_visibility="collapsed")
         filtered = get_project_tasks(pid, search=search)
-        selected_tid = st.session_state.get("selected_task_id")
 
         if not filtered:
             st.caption("Sin tareas en este proyecto")
         else:
-            # Separar en ejecutadas (con resultado) vs pendientes (sin resultado)
-            # Compatible con sqlite3.Row (no tiene método .get(), usar indexación directa)
-            ejecutadas = [t for t in filtered if t["llm_output"] and t["llm_output"].strip()]
-            pendientes = [t for t in filtered if not (t["llm_output"] and t["llm_output"].strip())]
+            task_groups = [
+                ("#### Ejecutadas", [t for t in filtered if task_execution_state(t) == "executed"]),
+                ("#### Preview", [t for t in filtered if task_execution_state(t) == "preview"]),
+                ("#### Fallidas", [t for t in filtered if task_execution_state(t) == "failed"]),
+                ("#### Pendientes", [t for t in filtered if task_execution_state(t) in {"pending", "draft"}]),
+            ]
 
-            # Sección: Ejecutadas
-            if ejecutadas:
-                st.markdown("#### ✅ Ejecutadas")
-                for t in ejecutadas:
+            for heading, group in task_groups:
+                if not group:
+                    continue
+                st.markdown(heading)
+                for t in group:
                     task_type_display = t["task_type"] or "Tarea"
+                    state = task_execution_state(t)
                     col_title, col_btn = st.columns([0.75, 0.25])
 
                     with col_title:
                         st.markdown(f"**{t['title']}**")
                         st.caption(f"{task_type_display}")
-                        st.caption("📋 Resultado disponible", help="Esta tarea ya fue ejecutada")
+                        st.caption(task_state_caption(state))
 
                     with col_btn:
                         if st.button("Abrir", key=f"open_task_{t['id']}", use_container_width=False):
-                            st.session_state["selected_task_id"] = t["id"]
-                            st.rerun()
-
-                    st.divider()
-
-            # Sección: Pendientes
-            if pendientes:
-                st.markdown("#### 📌 Pendientes")
-                for t in pendientes:
-                    task_type_display = t["task_type"] or "Tarea"
-                    col_title, col_btn = st.columns([0.75, 0.25])
-
-                    with col_title:
-                        st.markdown(f"**{t['title']}**")
-                        st.caption(f"{task_type_display}")
-
-                    with col_btn:
-                        if st.button("Abrir", key=f"open_task_{t['id']}", use_container_width=False):
-                            st.session_state["selected_task_id"] = t["id"]
+                            open_task_workspace(pid, t["id"])
                             st.rerun()
 
                     st.divider()
@@ -2642,33 +3162,54 @@ def project_view():
 
         task = get_task(tid)
         if not task or task["project_id"] != pid:
-            st.info("Selecciona una tarea válida del proyecto.")
+            st.info("Selecciona una tarea vÃ¡lida del proyecto.")
             return
 
+        current_state = task_execution_state(task)
         trace_key = f"trace_{tid}"
-        task_input = TaskInput(
-            task_id=task["id"],
-            title=task["title"],
-            description=task["description"],
-            task_type=task["task_type"],
-            context=task["context"] or "",
-            project_name=project["name"],
+        task_input = build_task_input_from_rows(task, project)
+        current_decision = execution_service.decision_engine.decide(task_input)
+        execution_prompt = build_execution_prompt(task_input)
+        latest_run = get_latest_execution_run(tid)
+        visible_output = task["llm_output"] or (latest_run["output_text"] if latest_run else "")
+
+        # PREPARAR VARIABLES PARA ROUTER (usado al final, no aquÃ­)
+        trace = normalize_trace(
+            st.session_state.get(trace_key)
+            or trace_from_history_run(latest_run)
+            or safe_json_loads(task["router_metrics_json"], {})
         )
-
-        # PREPARAR VARIABLES PARA ROUTER (usado al final, no aquí)
-        trace = st.session_state.get(trace_key)
         is_first_execution = trace.get("is_first_execution", False) if trace else False
+        display_execution_view(current_decision, task_input, execution_prompt, trace)
+        st.caption(f"Estado de tarea: {task_state_caption(current_state)}")
+        provider_block = execution_service.provider_errors.get(current_decision.provider)
+        if provider_block:
+            st.warning(f"Proveedor bloqueado: {provider_block}")
+        if latest_run:
+            st.caption(
+                f"Ultimo run persistido: {task_state_caption(latest_run['execution_status'])} | "
+                f"{latest_run['provider'] or 'provider?'} / {latest_run['model'] or 'modelo?'} | "
+                f"{latest_run['executed_at']}"
+            )
+            if latest_run["artifact_md_path"] or latest_run["artifact_json_path"]:
+                with st.expander("Rastro portable (.md/.json)", expanded=False):
+                    if latest_run["artifact_md_path"]:
+                        st.caption("Markdown")
+                        st.code(latest_run["artifact_md_path"], language="text")
+                    if latest_run["artifact_json_path"]:
+                        st.caption("JSON")
+                        st.code(latest_run["artifact_json_path"], language="text")
 
-        # Botón ejecutar - primario
+        # BotÃ³n ejecutar - primario
         col_exec, col_other = st.columns([2, 3])
         with col_exec:
             execute_btn = st.button("Ejecutar", use_container_width=True, key=f"execute_router_{tid}")
 
         if execute_btn:
-            # Detectar si es primera ejecución
-            is_first_execution = not task["llm_output"]
+            # Detectar si es primera ejecuciÃ³n
+            is_first_execution = current_state not in {"executed", "preview"}
 
-            # Mostrar progreso visual (no spinner genérico)
+            # Mostrar progreso visual (no spinner genÃ©rico)
             progress_placeholder = st.empty()
             status_messages = [
                 "Analizando tu tarea...",
@@ -2677,7 +3218,7 @@ def project_view():
             ]
 
             for idx, msg in enumerate(status_messages):
-                progress_placeholder.info(f"⏳ {msg}")
+                progress_placeholder.info(f"â³ {msg}")
                 import time
                 time.sleep(0.3)  # Timing visual para que se vea el progreso
 
@@ -2686,35 +3227,35 @@ def project_view():
             # Limpiar mensaje de progreso
             progress_placeholder.empty()
 
-            # Construir router_summary con info completa (éxito o error)
+            # Construir router_summary con info completa (Ã©xito o error)
             if result.status == "error":
                 # Detectar si es fallback (provider no disponible)
                 is_fallback = result.error.code == "provider_not_available"
 
                 if is_fallback:
                     # ==================== MODO DEMO: Propuesta Previa ====================
-                    # Generar propuesta previa útil basada en análisis del Router
+                    # Generar propuesta previa Ãºtil basada en anÃ¡lisis del Router
                     demo_proposal = generate_demo_proposal(result.routing, task_input)
                     display_demo_mode_panel(demo_proposal)
 
                     # Guardar propuesta previa
                     output = f"""[PROPUESTA PREVIA - Modo Demo]
 
-🧠 Qué he entendido:
+ðŸ§  QuÃ© he entendido:
 {demo_proposal['understood']}
 
-🎯 Cómo lo resolvería:
+ðŸŽ¯ CÃ³mo lo resolverÃ­a:
 {demo_proposal['strategy']}
 
 Prioridad: {demo_proposal['priority']}
 Salida esperada: {demo_proposal['expected_output']}
 
-💬 Prompt sugerido:
-{demo_proposal['suggested_prompt']}
+Contenido de ejecucion:
+{demo_proposal['execution_prompt']}
 
 ---
-Nota: Esta es una propuesta previa basada en el análisis del Router.
-Para obtener el resultado real, conecta un motor en Configuración.
+Nota: Esta es una propuesta previa basada en el anÃ¡lisis del Router.
+Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
 """
                     extract = demo_proposal["understood"]
 
@@ -2732,12 +3273,12 @@ Para obtener el resultado real, conecta un motor en Configuración.
                     # ==================== ERROR REAL (no fallback) ====================
                     # Mostrar warning estructurado (amarillo, no rojo)
                     st.warning(f"""
-**⚠️ No se pudo completar la ejecución**
+**âš ï¸ No se pudo completar la ejecuciÃ³n**
 
 **Tipo de error:** {result.error.code}
 **Detalles:** {result.error.message}
 
-→ Revisa la configuración del proveedor o conecta un motor diferente.
+â†’ Revisa la configuraciÃ³n del proveedor o conecta un motor diferente.
                     """.strip())
 
                     router_summary = (
@@ -2753,12 +3294,12 @@ Para obtener el resultado real, conecta un motor en Configuración.
                     execution_status = "failed"
 
             else:
-                # ==================== EJECUCIÓN EXITOSA ====================
+                # ==================== EJECUCIÃ“N EXITOSA ====================
                 output = result.output_text
                 extract = output[:700]
 
                 router_summary = (
-                    f"Ejecución completada\n"
+                    f"EjecuciÃ³n completada\n"
                     f"Modo: {result.routing.mode}\n"
                     f"Modelo: {result.metrics.model_used}\n"
                     f"Proveedor: {result.metrics.provider_used}\n"
@@ -2780,6 +3321,9 @@ Para obtener el resultado real, conecta un motor en Configuración.
                 "complexity_score": result.routing.complexity_score,
                 "status": execution_status,
                 "reasoning_path": result.routing.reasoning_path,
+                "execution_prompt": execution_prompt,
+                "error_code": result.error.code if result.error else "",
+                "error_message": result.error.message if result.error else "",
                 "executed_at": now_iso(),
             }
             save_execution_result(
@@ -2801,9 +3345,10 @@ Para obtener el resultado real, conecta un motor en Configuración.
                 "latency_ms": result.metrics.latency_ms,
                 "estimated_cost": result.metrics.estimated_cost,
                 "status": execution_status,  # "executed", "preview", o "failed"
-                "execution_status": execution_status,  # Explícito: qué tipo de resultado
+                "execution_status": execution_status,  # ExplÃ­cito: quÃ© tipo de resultado
                 "error_code": result.error.code if result.error else None,
                 "error_message": result.error.message if result.error else None,
+                "execution_prompt": execution_prompt,
                 "is_first_execution": is_first_execution,  # Flag para momento WOW
             }
             st.rerun()
@@ -2811,29 +3356,31 @@ Para obtener el resultado real, conecta un motor en Configuración.
         st.write("")
 
         # FASE 4: RESULTADO PANEL - PROTAGONIST
-        if not task["llm_output"]:
-            # Estado vacío: aguardando ejecución
-            st.info("📝 Resultado pendiente. Ejecuta el Router arriba para recibir la respuesta.")
+        if current_state == "failed":
+            st.warning(task["router_summary"] or "Ejecucion fallida. Revisa la configuracion del proveedor.")
+        elif current_state in {"pending", "draft"}:
+            # Estado vacÃ­o: aguardando ejecuciÃ³n
+            st.info("ðŸ“ Resultado pendiente. Ejecuta el Router arriba para recibir la respuesta.")
         else:
             # Con resultado: estructura simple y clara
             # [1] RESULTADO (PROTAGONISTA)
             output = st.text_area(
                 "",
-                value=task["llm_output"],
+                value=visible_output,
                 height=280,
-                placeholder="Resultado de la ejecución...",
+                placeholder="Resultado de la ejecuciÃ³n...",
                 key=f"output_{tid}",
                 label_visibility="collapsed"
             )
 
             st.write("")  # Espaciado
 
-            # [2] LÍNEA DE CONTINUIDAD (MICROCOPY)
-            st.caption("Puedes editar este resultado o mejorarlo con análisis más profundo.")
+            # [2] LÃNEA DE CONTINUIDAD (MICROCOPY)
+            st.caption("Puedes editar este resultado o mejorarlo con anÃ¡lisis mÃ¡s profundo.")
 
             st.write("")  # Espaciado
 
-            # [3] ACCIONES (4 botones máximo, orden exacto)
+            # [3] ACCIONES (4 botones mÃ¡ximo, orden exacto)
             col1, col2, col3, col4 = st.columns(4)
 
             # Definir claves de session_state para todos los flujos
@@ -2844,16 +3391,16 @@ Para obtener el resultado real, conecta un motor en Configuración.
 
             # 1. PRIMARIO: Guardar como activo (abre mini-flujo)
             with col1:
-                if st.button("📦 Guardar como activo", use_container_width=True, key=f"save_asset_btn_{tid}"):
+                if st.button("ðŸ“¦ Guardar como activo", use_container_width=True, key=f"save_asset_btn_{tid}"):
                     if not output.strip():
                         st.error("No hay contenido para guardar.")
                     else:
                         st.session_state[save_panel_key] = True
                         st.rerun()
 
-            # 2. SECUNDARIO: Mejorar resultado (con análisis más profundo)
+            # 2. SECUNDARIO: Mejorar resultado (con anÃ¡lisis mÃ¡s profundo)
             with col2:
-                if st.button("✨ Mejorar con análisis más profundo", use_container_width=True, key=f"improve_{tid}"):
+                if st.button("âœ¨ Mejorar con anÃ¡lisis mÃ¡s profundo", use_container_width=True, key=f"improve_{tid}"):
                     st.session_state[improve_in_progress_key] = True
                     st.rerun()
 
@@ -2865,12 +3412,12 @@ Para obtener el resultado real, conecta un motor en Configuración.
                 progress_placeholder = st.empty()
                 status_messages = [
                     "Analizando resultado actual...",
-                    "Ejecutando con análisis más profundo...",
+                    "Ejecutando con anÃ¡lisis mÃ¡s profundo...",
                     "Procesando mejoras..."
                 ]
 
                 for idx, msg in enumerate(status_messages):
-                    progress_placeholder.info(f"⏳ {msg}")
+                    progress_placeholder.info(f"â³ {msg}")
                     import time
                     time.sleep(0.3)
 
@@ -2878,15 +3425,13 @@ Para obtener el resultado real, conecta un motor en Configuración.
                 # El contexto enriquecido incluye el resultado anterior
                 enriched_context = f"{task['context'] or ''}\n\n[RESULTADO ANTERIOR]\n{output}"
 
-                improved_task_input = TaskInput(
-                    task_id=task["id"],
-                    title=task["title"],
-                    description=task["description"],
-                    task_type=task["task_type"],
-                    context=enriched_context.strip(),
-                    project_name=project["name"],
-                    preferred_mode="racing"  # Forzar RACING
+                improved_task_input = build_task_input_from_rows(
+                    task,
+                    project,
+                    context_override=enriched_context.strip(),
+                    preferred_mode="racing",
                 )
+                improved_execution_prompt = build_execution_prompt(improved_task_input)
 
                 # Ejecutar con RACING mode
                 improved_result = execution_service.execute(improved_task_input)
@@ -2905,6 +3450,7 @@ Para obtener el resultado real, conecta un motor en Configuración.
                         "latency_ms": improved_result.metrics.latency_ms,
                         "estimated_cost": improved_result.metrics.estimated_cost,
                         "status": improved_result.status,
+                        "execution_prompt": improved_execution_prompt,
                     }
                     st.rerun()
                 else:
@@ -2915,11 +3461,11 @@ Para obtener el resultado real, conecta un motor en Configuración.
 
             # 3. SECUNDARIO: Personalizar resultado
             with col3:
-                st.button("✏️ Personalizar", use_container_width=True, key=f"edit_result_{tid}", disabled=True, help="El resultado ya es editable arriba. Modifica el texto directamente.")
+                st.button("âœï¸ Personalizar", use_container_width=True, key=f"edit_result_{tid}", disabled=True, help="El resultado ya es editable arriba. Modifica el texto directamente.")
 
             # 4. TERCIARIO: Re-ejecutar
             with col4:
-                if st.button("🔄 Re-ejecutar", use_container_width=True, key=f"reexec_{tid}"):
+                if st.button("ðŸ”„ Re-ejecutar", use_container_width=True, key=f"reexec_{tid}"):
                     st.session_state[trace_key] = None
                     st.rerun()
 
@@ -2932,16 +3478,16 @@ Para obtener el resultado real, conecta un motor en Configuración.
                     st.markdown("---")
                     st.markdown("**Guardar como activo reutilizable**")
 
-                    # Generar nombre automático: primeras 5-8 palabras del resultado
+                    # Generar nombre automÃ¡tico: primeras 5-8 palabras del resultado
                     words = output.split()[:8]
-                    auto_name = " ".join(words) if words else "Activo sin título"
+                    auto_name = " ".join(words) if words else "Activo sin tÃ­tulo"
 
                     # Campo 1: Nombre del activo
                     asset_name = st.text_input(
                         "Nombre del activo",
                         value=auto_name,
                         key=f"asset_name_{tid}",
-                        placeholder="Título identificable...",
+                        placeholder="TÃ­tulo identificable...",
                         help="Las primeras palabras del resultado"
                     )
 
@@ -2958,16 +3504,16 @@ Para obtener el resultado real, conecta un motor en Configuración.
                         project_options,
                         index=selected_project_idx,
                         key=f"asset_project_{tid}",
-                        help="Dónde se guardará este activo"
+                        help="DÃ³nde se guardarÃ¡ este activo"
                     )
 
-                    # Campo 3: Descripción (opcional)
+                    # Campo 3: DescripciÃ³n (opcional)
                     asset_description = st.text_area(
-                        "Descripción (opcional)",
+                        "DescripciÃ³n (opcional)",
                         value="",
                         height=60,
                         key=f"asset_desc_{tid}",
-                        placeholder="Notas sobre cuándo reutilizar esto...",
+                        placeholder="Notas sobre cuÃ¡ndo reutilizar esto...",
                         help="Ayuda futura a entender este activo"
                     )
 
@@ -2975,7 +3521,7 @@ Para obtener el resultado real, conecta un motor en Configuración.
                     btn_col1, btn_col2 = st.columns([0.5, 0.5])
 
                     with btn_col1:
-                        if st.button("✓ Guardar activo", use_container_width=True, key=f"confirm_save_{tid}"):
+                        if st.button("âœ“ Guardar activo", use_container_width=True, key=f"confirm_save_{tid}"):
                             # Guardar el activo
                             selected_proj_id = next((p["id"] for p in projects if p["name"] == asset_project), pid)
                             create_asset(
@@ -2988,24 +3534,24 @@ Para obtener el resultado real, conecta un motor en Configuración.
 
                             # Limpiar estado
                             st.session_state[save_panel_key] = False
-                            st.success(f"✨ **{asset_name}** guardado en **{asset_project}** como activo reutilizable")
-                            st.balloons()  # Celebración visual
+                            st.success(f"âœ¨ **{asset_name}** guardado en **{asset_project}** como activo reutilizable")
+                            st.balloons()  # CelebraciÃ³n visual
                             st.rerun()
 
                     with btn_col2:
-                        if st.button("✕ Cancelar", use_container_width=True, key=f"cancel_save_{tid}"):
+                        if st.button("âœ• Cancelar", use_container_width=True, key=f"cancel_save_{tid}"):
                             st.session_state[save_panel_key] = False
                             st.rerun()
 
-            # BLOQUE DE RESULTADO MEJORADO (después del original)
+            # BLOQUE DE RESULTADO MEJORADO (despuÃ©s del original)
             if st.session_state.get(improved_result_key):
                 st.write("")  # Espaciado
                 st.markdown("---")
                 st.write("")
 
-                # IMPACTO VISUAL: Mostrar que accedió a poder extra
-                st.markdown("### 🚀 Resultado con Análisis Profundo")
-                st.caption("El sistema revisó tu trabajo con el modelo más potente. Aquí está lo que descubrió:")
+                # IMPACTO VISUAL: Mostrar que accediÃ³ a poder extra
+                st.markdown("### ðŸš€ Resultado con AnÃ¡lisis Profundo")
+                st.caption("El sistema revisÃ³ tu trabajo con el modelo mÃ¡s potente. AquÃ­ estÃ¡ lo que descubriÃ³:")
 
                 improved_output = st.session_state.get(improved_result_key, "")
 
@@ -3021,22 +3567,22 @@ Para obtener el resultado real, conecta un motor en Configuración.
 
                 st.write("")  # Espaciado
 
-                # Información de la mejora
+                # InformaciÃ³n de la mejora
                 improved_trace = st.session_state.get(improved_trace_key, {})
                 if improved_trace:
                     st.caption(
-                        f"✨ Análisis profundo | {improved_trace['model_used']} | "
+                        f"âœ¨ AnÃ¡lisis profundo | {improved_trace['model_used']} | "
                         f"~{improved_trace['latency_ms']}ms | "
                         f"${improved_trace['estimated_cost']:.4f}"
                     )
 
                 st.write("")  # Espaciado
 
-                # Botones de acción para resultado mejorado
+                # Botones de acciÃ³n para resultado mejorado
                 imp_col1, imp_col2, imp_col3 = st.columns([0.5, 0.25, 0.25])
 
                 with imp_col1:
-                    if st.button("✓ Usar este resultado", use_container_width=True, key=f"use_improved_{tid}"):
+                    if st.button("âœ“ Usar este resultado", use_container_width=True, key=f"use_improved_{tid}"):
                         # Reemplazar el resultado original con el mejorado
                         improved_metrics = {
                             "mode": improved_trace.get("mode", ""),
@@ -3047,13 +3593,14 @@ Para obtener el resultado real, conecta un motor en Configuración.
                             "complexity_score": improved_trace.get("complexity_score", 0),
                             "status": "executed",
                             "reasoning_path": improved_trace.get("reasoning_path", ""),
+                            "execution_prompt": improved_trace.get("execution_prompt", ""),
                             "executed_at": now_iso(),
                         }
                         save_execution_result(
                             task_id=task["id"],
                             model_used=improved_trace.get("model_used", ""),
                             router_summary=(
-                                f"Resultado mejorado con análisis profundo\n"
+                                f"Resultado mejorado con anÃ¡lisis profundo\n"
                                 f"Modelo: {improved_trace.get('model_used', '')}\n"
                                 f"Modo: {improved_trace.get('mode', '')}\n"
                                 f"Proveedor: {improved_trace.get('provider_used', '')}\n"
@@ -3077,6 +3624,7 @@ Para obtener el resultado real, conecta un motor en Configuración.
                             "status": "completed",
                             "error_code": None,
                             "error_message": None,
+                            "execution_prompt": improved_trace.get("execution_prompt", ""),
                             "is_first_execution": False,
                         }
 
@@ -3085,15 +3633,15 @@ Para obtener el resultado real, conecta un motor en Configuración.
                         st.session_state[improved_result_key] = None
                         st.session_state[improved_trace_key] = None
 
-                        st.success("✨ **Excelente.** Tu resultado ahora es la versión con análisis profundo")
+                        st.success("âœ¨ **Excelente.** Tu resultado ahora es la versiÃ³n con anÃ¡lisis profundo")
                         st.rerun()
 
                 with imp_col2:
-                    if st.button("↔️ Comparar", use_container_width=True, key=f"compare_improved_{tid}"):
-                        st.info("Comparación: arriba original, abajo mejorado. Desplázate para ver ambos.")
+                    if st.button("â†”ï¸ Comparar", use_container_width=True, key=f"compare_improved_{tid}"):
+                        st.info("ComparaciÃ³n: arriba original, abajo mejorado. DesplÃ¡zate para ver ambos.")
 
                 with imp_col3:
-                    if st.button("✕ Descartar", use_container_width=True, key=f"discard_improved_{tid}"):
+                    if st.button("âœ• Descartar", use_container_width=True, key=f"discard_improved_{tid}"):
                         # Limpiar estado de mejora
                         st.session_state[improve_in_progress_key] = False
                         st.session_state[improved_result_key] = None
@@ -3106,15 +3654,15 @@ Para obtener el resultado real, conecta un motor en Configuración.
         if trace:
             st.write("")  # Espaciado
 
-            mode_label = "🟢 Modo ECO" if trace["mode"] == "eco" else "🔵 Análisis Profundo"
-            mode_desc = "Respuesta rápida y precisa" if trace["mode"] == "eco" else "Análisis detallado y completo"
+            mode_label = "ðŸŸ¢ Modo ECO" if trace["mode"] == "eco" else "ðŸ”µ AnÃ¡lisis Profundo"
+            mode_desc = "Respuesta rÃ¡pida y precisa" if trace["mode"] == "eco" else "AnÃ¡lisis detallado y completo"
 
-            # DECISIÓN (contexto explicativo, no protagonista)
-            st.markdown(f"**{mode_label}** — _{mode_desc}_")
+            # DECISIÃ“N (contexto explicativo, no protagonista)
+            st.markdown(f"**{mode_label}** â€” _{mode_desc}_")
 
-            # RAZONAMIENTO (por qué eligió este modo)
+            # RAZONAMIENTO (por quÃ© eligiÃ³ este modo)
             if trace.get("reasoning_path"):
-                st.caption(f"**Por qué:** {trace['reasoning_path']}")
+                st.caption(f"**Por quÃ©:** {trace['reasoning_path']}")
 
             # METADATA (discreta, en columnas)
             col_meta1, col_meta2, col_meta3 = st.columns(3)
@@ -3129,7 +3677,7 @@ Para obtener el resultado real, conecta un motor en Configuración.
 
         # EXPANDIBLES - BAJO DEMANDA
         # 1. Ficha del proyecto
-        with st.expander("📋 Ficha del proyecto", expanded=False):
+        with st.expander("ðŸ“‹ Ficha del proyecto", expanded=False):
             st.markdown("**Objetivo**")
             st.caption(project["objective"] or "Sin objetivo definido")
             st.markdown("**Contexto de referencia**")
@@ -3137,38 +3685,20 @@ Para obtener el resultado real, conecta un motor en Configuración.
             st.markdown("**Reglas estables**")
             st.caption(project["base_instructions"] or "Sin reglas definidas")
 
-        # 2. Prompt sugerido
-        with st.expander("📝 Prompt sugerido", expanded=False):
-            prompt = f"""PROYECTO
-{project['name']}
-
-TAREA
-{task['title']}
-
-OBJETIVO
-{task['description']}
-
-CONTEXTO HEREDADO
-{project['base_context'] or 'Sin contexto base.'}
-
-CONTEXTO DE TAREA
-{task['context'] or 'Sin contexto específico.'}
-
-INSTRUCCIÓN
-Ayúdame a resolver esta tarea de forma clara, estructurada y accionable.
-"""
-            st.code(prompt)
+        # 2. Contenido de ejecucion
+        with st.expander("Contenido de ejecucion", expanded=False):
+            st.code(execution_prompt, language="text")
 
         # 3. Trazabilidad
         if trace:
-            with st.expander("🔍 Trazabilidad & Detalles técnicos", expanded=False):
+            with st.expander("ðŸ” Trazabilidad & Detalles tÃ©cnicos", expanded=False):
                 st.write(f"**Estado:** {trace['status'].upper()}")
                 st.write(f"**Modo:** {trace['mode']}")
                 st.write(f"**Modelo:** {trace['model_used']}")
                 st.write(f"**Proveedor:** {trace['provider_used']}")
                 st.write(f"**Latencia:** {trace['latency_ms']} ms")
                 st.write(f"**Coste estimado:** ${trace['estimated_cost']:.3f}")
-                st.write("**Motivo de la decisión:**")
+                st.write("**Motivo de la decisiÃ³n:**")
                 st.write(trace["reasoning_path"])
                 if trace.get("error_code"):
                     st.warning(f"**Error:** {trace['error_code']}")
@@ -3176,20 +3706,20 @@ Ayúdame a resolver esta tarea de forma clara, estructurada y accionable.
 
         # 4. Activos relacionados
         if assets:
-            with st.expander(f"🎯 Activos relacionados ({len(assets)})", expanded=False):
+            with st.expander(f"ðŸŽ¯ Activos relacionados ({len(assets)})", expanded=False):
                 for a in assets[:10]:
                     st.markdown(f"**{a['title']}**")
                     st.caption(a["summary"] or "Sin resumen")
                     st.divider()
         else:
-            with st.expander("🎯 Activos relacionados (0)", expanded=False):
-                st.info("Todavía no hay activos en este proyecto.")
+            with st.expander("ðŸŽ¯ Activos relacionados (0)", expanded=False):
+                st.info("TodavÃ­a no hay activos en este proyecto.")
 
 
 # ==================== BLOQUE E1b: RADAR VIEW ====================
 def radar_view():
     """
-    Renderiza catálogo vivo como página Streamlit (E1b: Vista).
+    Renderiza catÃ¡logo vivo como pÃ¡gina Streamlit (E1b: Vista).
 
     Consume snapshot de build_radar_snapshot() y presenta:
     - Narrativa clara: "Live catalog snapshot"
@@ -3197,21 +3727,21 @@ def radar_view():
     - Detalle por provider
     - Metadata honesta
 
-    NO es observatorio histórico, NO promete features que no tiene.
+    NO es observatorio histÃ³rico, NO promete features que no tiene.
     """
     # ==================== Header + Narrativa ====================
-    st.header("📡 Radar")
+    st.header("ðŸ“¡ Radar")
     st.markdown("""
     **Live Catalog Snapshot**
 
-    Qué ves aquí es el estado actual del catálogo de PWR.
+    QuÃ© ves aquÃ­ es el estado actual del catÃ¡logo de PWR.
     """)
 
     # Control toggle para debug
     col1, col2 = st.columns([0.8, 0.2])
     with col2:
         show_internal = st.checkbox(
-            "🔧 Debug",
+            "ðŸ”§ Debug",
             value=False,
             help="Mostrar modelos internos (mock/test)"
         )
@@ -3220,14 +3750,14 @@ def radar_view():
     radar = build_radar_snapshot(internal=show_internal)
 
     if radar["status"] != "ok":
-        st.error(f"⚠️ Error: {radar.get('error', 'Unknown')}")
+        st.error(f"âš ï¸ Error: {radar.get('error', 'Unknown')}")
         return
 
     radar_data = radar["radar"]
     metadata = radar["metadata"]
 
     # ==================== Resumen (Arriba) ====================
-    st.subheader("📊 Estado del Catálogo")
+    st.subheader("ðŸ“Š Estado del CatÃ¡logo")
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -3243,7 +3773,7 @@ def radar_view():
     st.divider()
 
     # ==================== Providers: Listado Detallado ====================
-    st.subheader("🔌 Providers")
+    st.subheader("ðŸ”Œ Providers")
 
     for provider_name in sorted(radar_data["providers"].keys()):
         provider = radar_data["providers"][provider_name]
@@ -3256,25 +3786,25 @@ def radar_view():
 
             with col1:
                 # Status badge + nombre
-                status_emoji = "🟢" if model["status"] == "active" else "🟡"
+                status_emoji = "ðŸŸ¢" if model["status"] == "active" else "ðŸŸ¡"
                 internal_badge = " [INTERNAL]" if model["is_internal"] else ""
                 st.write(f"{status_emoji} **{model['name']}{internal_badge}**")
 
             with col2:
                 # Mode + cost
-                st.caption(f"📌 {model['mode']} | 💰 ${model['estimated_cost_per_run']:.3f}")
+                st.caption(f"ðŸ“Œ {model['mode']} | ðŸ’° ${model['estimated_cost_per_run']:.3f}")
 
             with col3:
                 # Capabilities badges
                 caps = model.get("capabilities", {})
                 badges = []
                 if caps.get("vision"):
-                    badges.append("👁️")
+                    badges.append("ðŸ‘ï¸")
                 if caps.get("reasoning"):
-                    badges.append("🧠")
+                    badges.append("ðŸ§ ")
                 if caps.get("code_execution"):
-                    badges.append("💻")
-                st.caption(" ".join(badges) if badges else "—")
+                    badges.append("ðŸ’»")
+                st.caption(" ".join(badges) if badges else "â€”")
 
             # Expandable full details
             with st.expander(f"Detalles de {model['name']}", expanded=False):
@@ -3292,8 +3822,8 @@ def radar_view():
 
         st.divider()
 
-    # ==================== Modes: Descripción ====================
-    st.subheader("⚙️ Modos")
+    # ==================== Modes: DescripciÃ³n ====================
+    st.subheader("âš™ï¸ Modos")
 
     for mode_name in radar_data["summary"]["modes_list"]:
         mode = radar_data["modes"][mode_name]
@@ -3305,30 +3835,30 @@ def radar_view():
     st.divider()
 
     # ==================== Metadata Footer ====================
-    st.subheader("ℹ️ Acerca de este Radar")
+    st.subheader("â„¹ï¸ Acerca de este Radar")
 
     col1, col2 = st.columns([0.7, 0.3])
 
     with col1:
-        st.caption(f"📅 Generado: {metadata['generated_at']}")
-        st.caption(f"📦 Versión: {metadata['radar_version']} · Fuente: {metadata['catalog_source']}")
+        st.caption(f"ðŸ“… Generado: {metadata['generated_at']}")
+        st.caption(f"ðŸ“¦ VersiÃ³n: {metadata['radar_version']} Â· Fuente: {metadata['catalog_source']}")
 
     with col2:
         if show_internal:
-            st.warning("⚠️ Modelos internos mostrados")
+            st.warning("âš ï¸ Modelos internos mostrados")
 
-    # Clarificación sobre lo que ES y lo que NO ES
+    # ClarificaciÃ³n sobre lo que ES y lo que NO ES
     st.markdown(f"""
-    **Qué es Radar v1:**
-    - ✅ Snapshot del catálogo vivo (qué tenemos hoy)
-    - ✅ Configuración de providers y modelos
-    - ✅ Capacidades disponibles
+    **QuÃ© es Radar v1:**
+    - âœ… Snapshot del catÃ¡logo vivo (quÃ© tenemos hoy)
+    - âœ… ConfiguraciÃ³n de providers y modelos
+    - âœ… Capacidades disponibles
 
-    **Qué NO es Radar v1 (aún):**
-    - ❌ Observatorio histórico
-    - ❌ Benchmarking
-    - ❌ Health monitor
-    - ❌ Scoring adaptativo
+    **QuÃ© NO es Radar v1 (aÃºn):**
+    - âŒ Observatorio histÃ³rico
+    - âŒ Benchmarking
+    - âŒ Health monitor
+    - âŒ Scoring adaptativo
 
     *{metadata['note']}*
     """)
@@ -3378,9 +3908,9 @@ def main():
     if os.environ.get("PORT"):  # Railway sets PORT env var
         print(f"[MAIN] PORT={os.environ.get('PORT')}", file=sys.stderr, flush=True)
         st.warning(
-            "⚠️ **Entorno de prueba en Railway.** La persistencia local con SQLite puede ser efímera. "
-            "Válido para test corto de UX, no para uso productivo.",
-            icon="🔧"
+            "âš ï¸ **Entorno de prueba en Railway.** La persistencia local con SQLite puede ser efÃ­mera. "
+            "VÃ¡lido para test corto de UX, no para uso productivo.",
+            icon="ðŸ”§"
         )
 
     # ===== Initialize Database (with defensive error handling) =====
@@ -3390,7 +3920,7 @@ def main():
         print("[MAIN] init_db() OK", file=sys.stderr, flush=True)
     except Exception as e:
         print(f"[MAIN] init_db() FAILED: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-        st.error(f"❌ Startup error: Database initialization failed: {str(e)}")
+        st.error(f"âŒ Startup error: Database initialization failed: {str(e)}")
         st.stop()
 
     print("[MAIN] About to call inject_css()...", file=sys.stderr, flush=True)
@@ -3399,19 +3929,19 @@ def main():
 
     print("[MAIN] About to build sidebar...", file=sys.stderr, flush=True)
     with st.sidebar:
-        # ==================== TÍTULO REDUCIDO ====================
+        # ==================== TÃTULO REDUCIDO ====================
         st.markdown("### PWR")
 
-        # ==================== NAVEGACIÓN PRINCIPAL VERTICAL (minimalista) ====================
+        # ==================== NAVEGACIÃ“N PRINCIPAL VERTICAL (minimalista) ====================
         current_view = st.session_state.get("view", "home")
 
-        if st.button("🏠 Home", use_container_width=True, key="nav_home",
+        if st.button("ðŸ  Home", use_container_width=True, key="nav_home",
                      type="primary" if current_view == "home" else "secondary"):
             st.session_state["view"] = "home"
             st.session_state["active_project_id"] = None
             st.rerun()
 
-        if st.button("📡 Radar", use_container_width=True, key="nav_radar",
+        if st.button("ðŸ“¡ Radar", use_container_width=True, key="nav_radar",
                      type="primary" if current_view == "radar" else "secondary"):
             st.session_state["view"] = "radar"
             st.rerun()
@@ -3426,7 +3956,7 @@ def main():
             with get_conn() as conn:
                 project = conn.execute("SELECT name FROM projects WHERE id = ?", (active_project_id,)).fetchone()
                 if project:
-                    st.caption("📁 Proyecto activo")
+                    st.caption("ðŸ“ Proyecto activo")
                     st.markdown(f"**{project['name'][:25]}**")
                     st.divider()
 
@@ -3434,7 +3964,7 @@ def main():
             with get_conn() as conn:
                 task = conn.execute("SELECT title FROM tasks WHERE id = ?", (active_task_id,)).fetchone()
                 if task:
-                    st.caption("📌 Tarea actual")
+                    st.caption("ðŸ“Œ Tarea actual")
                     st.markdown(f"**{task['title'][:25]}**")
                     st.divider()
 

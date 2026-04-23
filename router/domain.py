@@ -10,6 +10,9 @@ class TaskInput:
     task_type: str
     context: str = ""
     project_name: str = ""
+    project_objective: str = ""
+    project_base_context: str = ""
+    project_base_instructions: str = ""
     max_budget: Optional[int] = None
     preferred_mode: Optional[str] = None
 

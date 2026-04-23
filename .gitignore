@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+pwr_data/pwr.db
+pwr_data/portable_runs/
+router/__pycache__/
