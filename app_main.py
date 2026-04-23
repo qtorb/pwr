@@ -170,6 +170,54 @@ def open_task_workspace(project_id: int, task_id: int) -> None:
     st.session_state["view"] = "project_view"
 
 
+def clear_new_task_inputs() -> None:
+    st.session_state["home_capture_input"] = ""
+    st.session_state["home_task_context"] = ""
+
+
+def schedule_new_task_input_clear() -> None:
+    st.session_state["_clear_new_task_inputs_on_load"] = True
+
+
+def apply_pending_new_task_input_clear() -> None:
+    if st.session_state.pop("_clear_new_task_inputs_on_load", False):
+        clear_new_task_inputs()
+
+
+def clear_project_capture_inputs(project_id: Optional[int]) -> None:
+    if not project_id:
+        return
+    st.session_state[f"title_{project_id}"] = ""
+    st.session_state[f"ctx_task_{project_id}"] = ""
+
+
+def schedule_project_capture_clear(project_id: Optional[int]) -> None:
+    if not project_id:
+        return
+    pending = st.session_state.get("_clear_project_capture_ids", [])
+    if project_id not in pending:
+        st.session_state["_clear_project_capture_ids"] = [*pending, project_id]
+
+
+def apply_pending_project_capture_clear(project_id: Optional[int]) -> None:
+    if not project_id:
+        return
+    pending = st.session_state.get("_clear_project_capture_ids", [])
+    if project_id not in pending:
+        return
+    clear_project_capture_inputs(project_id)
+    remaining = [pid for pid in pending if pid != project_id]
+    if remaining:
+        st.session_state["_clear_project_capture_ids"] = remaining
+    else:
+        st.session_state.pop("_clear_project_capture_ids", None)
+
+
+def open_new_task_view() -> None:
+    schedule_new_task_input_clear()
+    st.session_state["view"] = "new_task"
+
+
 def build_task_input(
     task_id: int,
     title: str,
@@ -1956,10 +2004,10 @@ def render_pwr_header():
         if st.button("Inicio", use_container_width=True, key="nav_home"):
             st.session_state["view"] = "home"
             st.rerun()
-    
+
     with col_nav_tasks:
         if st.button("Tareas", use_container_width=True, key="nav_tasks"):
-            st.session_state["view"] = "new_task"
+            open_new_task_view()
             st.rerun()
     
     with col_nav_projects:
@@ -1974,7 +2022,7 @@ def render_pwr_header():
     
     with col_actions:
         if st.button("Nueva Tarea", use_container_width=True, key="nav_new_task_primary", type="primary"):
-            st.session_state["view"] = "new_task"
+            open_new_task_view()
             st.rerun()
     
     st.divider()
@@ -2374,7 +2422,7 @@ def display_onboarding_result(result, task_input, is_first_execution: bool = Tru
             # Guarda resultado para pasar como contexto a nueva tarea
             extract = result.output_text[:500]
             st.session_state["context_from_result"] = extract
-            st.session_state["view"] = "new_task"
+            open_new_task_view()
             st.rerun()
 
     with col2:
@@ -2382,7 +2430,7 @@ def display_onboarding_result(result, task_input, is_first_execution: bool = Tru
             # Abre new_task en el proyecto actual
             if "project_id" in st.session_state.get("onboard_result", {}):
                 st.session_state["active_project_id"] = st.session_state["onboard_result"]["project_id"]
-            st.session_state["view"] = "new_task"
+            open_new_task_view()
             st.rerun()
 
     st.write("")  # Espaciado pequeño
@@ -2777,12 +2825,20 @@ def new_task_view():
     - Botón "Volver" discreto
     - Sin "Retoma tu trabajo" ni "Tus proyectos"
     """
+    apply_pending_new_task_input_clear()
+
     # Inicializar ExecutionService
     with get_conn() as conn:
         execution_service = ExecutionService(conn)
 
     projects = get_projects()
-    default_project = projects[0] if projects else None
+    active_project_id = st.session_state.get("active_project_id")
+    default_project = None
+
+    if active_project_id:
+        default_project = next((project for project in projects if project["id"] == active_project_id), None)
+    if not default_project and projects:
+        default_project = projects[0]
 
     # Header: Título + Volver (discreto)
     col1, col2 = st.columns([0.85, 0.15])
@@ -2790,8 +2846,8 @@ def new_task_view():
         st.markdown("### ¿Qué necesitas hacer ahora?")
     with col2:
         if st.button("← Volver", key="new_task_back", use_container_width=True):
+            schedule_new_task_input_clear()
             st.session_state["view"] = "home"
-            st.session_state["home_capture_input"] = ""
             st.rerun()
 
     if default_project:
@@ -2854,6 +2910,7 @@ def new_task_view():
                      disabled=not default_project, type="primary"):
             if default_project and capture_title.strip():
                 tid = create_task(default_project["id"], capture_title, "", TIPOS_TAREA[0], context or "", None)
+                schedule_new_task_input_clear()
                 open_task_workspace(default_project["id"], tid)
                 st.rerun()
 
@@ -2913,6 +2970,7 @@ def home_view():
                 st.caption(f"{project_name} · {time_ago}")
             with col2:
                 if st.button("→", key=f"home_today_{task['id']}", help="Abrir", use_container_width=True):
+                    schedule_project_capture_clear(task["project_id"])
                     open_task_workspace(task["project_id"], task["id"])
                     st.rerun()
 
@@ -2935,6 +2993,7 @@ def home_view():
                     st.markdown(f"**📌 {task['title'][:40]}**")
                     st.caption(f"{task['project_name']} · {time_ago}")
                     if st.button("Continuar", key=f"home_continue_{task['id']}", use_container_width=True):
+                        schedule_project_capture_clear(task["project_id"])
                         open_task_workspace(task["project_id"], task["id"])
                         st.rerun()
 
@@ -2956,7 +3015,9 @@ def home_view():
                     st.markdown(f"**📁 {project['name'][:30]}**")
                     st.caption(f"{project['active_task_count']} tareas")
                     if st.button("Abrir", key=f"home_open_project_{project['id']}", use_container_width=True):
+                        schedule_project_capture_clear(project["id"])
                         st.session_state["active_project_id"] = project["id"]
+                        st.session_state["selected_task_id"] = None
                         st.session_state["view"] = "project_view"
                         st.rerun()
 
@@ -2969,7 +3030,7 @@ def home_view():
 
     with col1:
         if st.button("➕ Nueva tarea", use_container_width=True, key="home_new_task_btn", type="primary"):
-            st.session_state["view"] = "new_task"
+            open_new_task_view()
             st.rerun()
 
     with col2:
@@ -3000,6 +3061,7 @@ def home_view():
                     st.error("El nombre es obligatorio.")
                 else:
                     pid = create_project(name, description, objective, base_context, base_instructions, tags, files)
+                    schedule_project_capture_clear(pid)
                     st.session_state["active_project_id"] = pid
                     st.session_state["selected_task_id"] = None
                     st.session_state["view"] = "project_view"
@@ -3029,6 +3091,8 @@ def project_view():
         st.warning("No se pudo cargar el proyecto.")
         return
 
+    apply_pending_project_capture_clear(pid)
+
     # Inicializar ExecutionService con BD viva via ModelCatalog
     with get_conn() as conn:
         execution_service = ExecutionService(conn)
@@ -3045,7 +3109,10 @@ def project_view():
         st.markdown(f"<div style='font-size:15px; font-weight:600; color:#0F172A;'>{project['name']}</div>", unsafe_allow_html=True)
     with h2:
         if st.button("Cerrar", use_container_width=True):
+            schedule_project_capture_clear(pid)
             st.session_state["active_project_id"] = None
+            st.session_state["selected_task_id"] = None
+            st.session_state["view"] = "home"
             st.rerun()
 
     st.markdown("---")
@@ -3111,6 +3178,7 @@ def project_view():
         if st.button("Generar propuesta", use_container_width=True, key=f"create_task_{pid}", disabled=not title.strip()):
             if title.strip():
                 tid = create_task(pid, title, "", TIPOS_TAREA[0], context or "", None)
+                schedule_project_capture_clear(pid)
                 open_task_workspace(pid, tid)
                 st.rerun()
 

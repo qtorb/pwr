@@ -7,11 +7,14 @@ import py_compile
 import sys
 from pathlib import Path
 
+from check_mojibake import scan_repo
+
 
 ROOT = Path(__file__).resolve().parent
 EXPECTED_PYTHON = (3, 11)
 REQUIRED_FILES = [
     "app_main.py",
+    "check_mojibake.py",
     "requirements.txt",
     "router/domain.py",
     "router/providers.py",
@@ -85,6 +88,15 @@ def main() -> int:
     except py_compile.PyCompileError as exc:
         fail(f"app_main.py does not compile: {exc.msg}")
         failures += 1
+
+    mojibake_hits = scan_repo(ROOT)
+    if mojibake_hits:
+        sample = mojibake_hits[0]
+        rel_path = sample[0].relative_to(ROOT)
+        fail(f"mojibake signatures detected in tracked text files (first hit: {rel_path}:{sample[1]})")
+        failures += 1
+    else:
+        ok("no mojibake signatures in tracked text files")
 
     if EXPECTED_DB.exists():
         ok("pwr_data/pwr.db exists")
