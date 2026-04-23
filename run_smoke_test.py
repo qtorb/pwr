@@ -14,6 +14,14 @@ from streamlit.testing.v1 import AppTest
 
 from router import ExecutionService, TaskInput
 from router.providers import build_execution_prompt
+from state_contract import (
+    HOME_ACTIVITY_STATES,
+    HOME_RETAKE_STATES,
+    STATE_CONTRACT,
+    TASK_EXECUTION_STATES,
+    classify_runtime_transition,
+    resolve_runtime_execution_state,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -172,7 +180,10 @@ Timestamp: {payload['executed_at']}
 
 
 def persist_live_smoke_run(conn: sqlite3.Connection, task_id: int, result, task_input: TaskInput, prompt_text: str) -> int:
-    status = "executed" if result.status == "completed" else "failed"
+    status = resolve_runtime_execution_state(
+        result.status,
+        result.error.code if result.error else "",
+    )
     output = result.output_text or ""
     error_code = result.error.code if result.error else ""
     error_message = result.error.message if result.error else ""
@@ -291,6 +302,13 @@ def run_basic_smoke() -> int:
 
     home = run_app()
     failures += 0 if check(len(home.exception) == 0, "Inicio renders without exception") else 1
+    failures += 0 if check(set(STATE_CONTRACT.keys()) == TASK_EXECUTION_STATES, "state contract covers live execution states") else 1
+    failures += 0 if check(set(HOME_RETAKE_STATES).issubset(set(HOME_ACTIVITY_STATES)), "Home re-entry states are subset of Home activity states") else 1
+    failures += 0 if check(resolve_runtime_execution_state("error", "provider_not_available") == "preview", "provider_not_available resolves to preview") else 1
+    failures += 0 if check(resolve_runtime_execution_state("error", "invalid_key") == "failed", "provider auth errors resolve to failed") else 1
+    failures += 0 if check(classify_runtime_transition("pending", "preview")[0] == "valid", "pending -> preview is valid in runtime contract") else 1
+    failures += 0 if check(classify_runtime_transition("failed", "executed")[0] == "valid", "failed -> executed is valid in runtime contract") else 1
+    failures += 0 if check(classify_runtime_transition("draft", "pending")[0] == "ambiguous", "draft -> pending stays marked ambiguous for compatibility") else 1
 
     if not DB_PATH.exists():
         print("[FAIL] pwr_data/pwr.db was not created")

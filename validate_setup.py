@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parent
 EXPECTED_PYTHON = (3, 11)
 REQUIRED_FILES = [
     "app_main.py",
+    "state_contract.py",
     "requirements.txt",
     "router/domain.py",
     "router/providers.py",
@@ -79,12 +80,13 @@ def main() -> int:
         warn("GEMINI_API_KEY is not available in this process; real Gemini smoke remains pending")
         warn("PowerShell: $env:GEMINI_API_KEY = \"your-gemini-key\"")
 
-    try:
-        py_compile.compile(str(ROOT / "app_main.py"), doraise=True)
-        ok("app_main.py compiles")
-    except py_compile.PyCompileError as exc:
-        fail(f"app_main.py does not compile: {exc.msg}")
-        failures += 1
+    for rel_path in ("app_main.py", "state_contract.py"):
+        try:
+            py_compile.compile(str(ROOT / rel_path), doraise=True)
+            ok(f"{rel_path} compiles")
+        except py_compile.PyCompileError as exc:
+            fail(f"{rel_path} does not compile: {exc.msg}")
+            failures += 1
 
     if EXPECTED_DB.exists():
         ok("pwr_data/pwr.db exists")

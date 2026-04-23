@@ -11,6 +11,17 @@ import streamlit as st
 from router import ExecutionService, TaskInput, ModelCatalog
 from router.decision_engine import DecisionEngine
 from router.providers import build_execution_prompt
+from state_contract import (
+    HOME_ACTIVITY_STATES,
+    HOME_RETAKE_STATES,
+    REENTRY_CONTEXT_STATES,
+    TASK_EXECUTION_STATES,
+    normalize_execution_state,
+    resolve_runtime_execution_state,
+    task_primary_action_hint,
+    task_primary_action_label,
+    task_state_caption,
+)
 
 APP_TITLE = "Portable Work Router"
 BASE_DIR = Path(__file__).resolve().parent
@@ -112,14 +123,6 @@ def build_run_fingerprint(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-TASK_EXECUTION_STATES = {"draft", "preview", "pending", "executed", "failed"}
-LEGACY_TASK_STATES = {
-    "borrador": "draft",
-    "router_listo": "pending",
-    "ejecutado": "executed",
-}
-
-
 def row_value(row, key: str, default=""):
     try:
         if hasattr(row, "keys") and key in row.keys():
@@ -131,13 +134,6 @@ def row_value(row, key: str, default=""):
     except Exception:
         return default
     return default
-
-
-def normalize_execution_state(value: str) -> str:
-    state = str(value or "").strip().lower()
-    if state in TASK_EXECUTION_STATES:
-        return state
-    return LEGACY_TASK_STATES.get(state, "")
 
 
 def task_execution_state(task) -> str:
@@ -154,16 +150,6 @@ def task_execution_state(task) -> str:
     return execution_state or status_state or "pending"
 
 
-def task_state_caption(state: str) -> str:
-    return {
-        "draft": "Borrador",
-        "preview": "Propuesta previa guardada",
-        "pending": "Pendiente de ejecucion",
-        "executed": "Resultado disponible",
-        "failed": "Ejecucion fallida",
-    }.get(state, "Pendiente de ejecucion")
-
-
 def compact_text(value: str, max_len: int = 220) -> str:
     cleaned = " ".join(str(value or "").split())
     if not cleaned:
@@ -171,26 +157,6 @@ def compact_text(value: str, max_len: int = 220) -> str:
     if len(cleaned) <= max_len:
         return cleaned
     return cleaned[: max_len - 1].rstrip() + "…"
-
-
-def task_primary_action_label(state: str) -> str:
-    return {
-        "failed": "Reintentar",
-        "preview": "Continuar",
-        "pending": "Ejecutar ahora",
-        "draft": "Ejecutar ahora",
-        "executed": "Ejecutar de nuevo",
-    }.get(state, "Ejecutar")
-
-
-def task_primary_action_hint(state: str) -> str:
-    return {
-        "failed": "Vas a reintentar usando el contexto actual y el intento previo visible.",
-        "preview": "Vas a continuar desde la propuesta previa guardada.",
-        "pending": "Vas a lanzar la primera ejecucion pendiente de esta tarea.",
-        "draft": "Este borrador se tratara como pendiente y se ejecutara con el contexto actual.",
-        "executed": "Vas a ejecutar de nuevo con el contexto visible.",
-    }.get(state, "Ejecuta la tarea con el contexto actual.")
 
 
 def task_execution_progress_messages(state: str) -> list[str]:
@@ -2196,13 +2162,13 @@ def home_task_action_label(state: str) -> str:
         "preview": "Continuar",
         "failed": "Revisar fallo",
         "pending": "Retomar",
-        "draft": "Abrir",
+        "draft": "Retomar",
     }.get(state, "Abrir")
 
 
 def get_recent_home_tasks(
     limit: int = 5,
-    states: tuple[str, ...] = ("pending", "preview", "failed", "executed"),
+    states: tuple[str, ...] = HOME_ACTIVITY_STATES,
     today_only: bool = False,
     prioritize_reentry: bool = False,
 ) -> List[Dict]:
@@ -2901,7 +2867,12 @@ def onboarding_view():
                     execution_result = execution_service.execute(task_input)
                     progress_placeholder.empty()
 
-                    if execution_result.status == "completed":
+                    execution_status = resolve_runtime_execution_state(
+                        execution_result.status,
+                        execution_result.error.code if execution_result.error else "",
+                    )
+
+                    if execution_status == "executed":
                         output = execution_result.output_text
                         extract = output[:700]
                         router_summary = (
@@ -2910,12 +2881,38 @@ def onboarding_view():
                             f"Modelo: {execution_result.metrics.model_used}\n"
                             f"Motivo:\n- {execution_result.routing.reasoning_path}"
                         )
-                        execution_status = "executed"
+                    elif execution_status == "preview":
+                        demo_proposal = generate_demo_proposal(execution_result.routing, task_input)
+                        output = f"""[PROPUESTA PREVIA - Modo Demo]
+
+🧠 Qué he entendido:
+{demo_proposal['understood']}
+
+🎯 Cómo lo resolvería:
+{demo_proposal['strategy']}
+
+Prioridad: {demo_proposal['priority']}
+Salida esperada: {demo_proposal['expected_output']}
+
+Contenido de ejecucion:
+{demo_proposal['execution_prompt']}
+
+---
+Nota: Esta es una propuesta previa basada en el análisis del Router.
+Para obtener el resultado real, conecta un motor en Configuración.
+"""
+                        extract = demo_proposal["understood"]
+                        router_summary = (
+                            f"Propuesta previa (demo)\n"
+                            f"Modo: {execution_result.routing.mode}\n"
+                            f"Modelo: {execution_result.routing.model}\n"
+                            f"Motivo:\n- {execution_result.routing.reasoning_path}\n\n"
+                            f"Para resultado real: Conecta {execution_result.routing.provider}"
+                        )
                     else:
                         output = "[Resultado no disponible]"
                         extract = ""
                         router_summary = f"Intento fallido\nError: {execution_result.error.message if execution_result.error else 'desconocido'}"
-                        execution_status = "failed"
 
                     router_metrics = {
                         "mode": execution_result.routing.mode,
@@ -3111,7 +3108,7 @@ def home_view():
 
     recent_tasks = get_recent_home_tasks(
         limit=6,
-        states=("failed", "preview", "pending"),
+        states=HOME_RETAKE_STATES,
         prioritize_reentry=False,
     )
 
@@ -3376,7 +3373,7 @@ def project_view():
             or safe_json_loads(task["router_metrics_json"], {})
         )
         is_first_execution = trace.get("is_first_execution", False) if trace else False
-        reentry_states = {"failed", "preview", "pending", "draft"}
+        reentry_states = REENTRY_CONTEXT_STATES
         followthrough = st.session_state.pop(followthrough_key, None)
         if current_state in reentry_states:
             reentry_context = build_reentry_context(task, current_state, latest_run, trace, visible_output)
@@ -3458,9 +3455,14 @@ def project_view():
             progress_placeholder.empty()
 
             # Construir router_summary con info completa (éxito o error)
+            execution_status = resolve_runtime_execution_state(
+                result.status,
+                result.error.code if result.error else "",
+            )
+
             if result.status == "error":
                 # Detectar si es fallback (provider no disponible)
-                is_fallback = result.error.code == "provider_not_available"
+                is_fallback = execution_status == "preview"
 
                 if is_fallback:
                     # ==================== MODO DEMO: Propuesta Previa ====================
@@ -3497,8 +3499,6 @@ Para obtener el resultado real, conecta un motor en Configuración.
                         f"Para resultado real: Conecta {result.routing.provider}"
                     )
 
-                    execution_status = "preview"
-
                 else:
                     # ==================== ERROR REAL (no fallback) ====================
                     # Mostrar warning estructurado (amarillo, no rojo)
@@ -3521,8 +3521,6 @@ Para obtener el resultado real, conecta un motor en Configuración.
                     )
                     output = ""
                     extract = ""
-                    execution_status = "failed"
-
             else:
                 # ==================== EJECUCIÓN EXITOSA ====================
                 output = result.output_text
@@ -3538,8 +3536,6 @@ Para obtener el resultado real, conecta un motor en Configuración.
                     f"Coste estimado: ${result.metrics.estimated_cost:.3f}\n\n"
                     f"Motivo:\n- {result.routing.reasoning_path}"
                 )
-
-                execution_status = "executed"
 
             # Guardar resultado en BD (siempre: executed, preview, o failed)
             router_metrics = {
