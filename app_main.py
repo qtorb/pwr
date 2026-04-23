@@ -185,12 +185,83 @@ def task_primary_action_label(state: str) -> str:
 
 def task_primary_action_hint(state: str) -> str:
     return {
-        "failed": "Revisa el ultimo error y vuelve a intentarlo.",
-        "preview": "Continua desde la propuesta previa ya guardada.",
-        "pending": "La tarea esta lista para su primera ejecucion.",
-        "draft": "Completa la tarea ejecutandola por primera vez.",
-        "executed": "Lanza una nueva ejecucion si necesitas actualizar el resultado.",
+        "failed": "Vas a reintentar usando el contexto actual y el intento previo visible.",
+        "preview": "Vas a continuar desde la propuesta previa guardada.",
+        "pending": "Vas a lanzar la primera ejecucion pendiente de esta tarea.",
+        "draft": "Este borrador se tratara como pendiente y se ejecutara con el contexto actual.",
+        "executed": "Vas a ejecutar de nuevo con el contexto visible.",
     }.get(state, "Ejecuta la tarea con el contexto actual.")
+
+
+def task_execution_progress_messages(state: str) -> list[str]:
+    return {
+        "failed": [
+            "Revisando el ultimo fallo...",
+            "Preparando un nuevo intento...",
+            "Reintentando con el contexto guardado...",
+        ],
+        "preview": [
+            "Recuperando la propuesta previa...",
+            "Preparando la continuacion...",
+            "Continuando la tarea...",
+        ],
+        "pending": [
+            "Preparando la tarea pendiente...",
+            "Seleccionando el mejor modo...",
+            "Iniciando la ejecucion...",
+        ],
+        "draft": [
+            "Revisando el borrador actual...",
+            "Preparando la primera ejecucion...",
+            "Iniciando la tarea...",
+        ],
+        "executed": [
+            "Recuperando el contexto anterior...",
+            "Preparando una nueva ejecucion...",
+            "Ejecutando de nuevo...",
+        ],
+    }.get(state, [
+        "Analizando tu tarea...",
+        "Seleccionando el mejor modo...",
+        "Ejecutando...",
+    ])
+
+
+def build_followthrough_feedback(from_state: str, to_state: str) -> tuple[str, str]:
+    from_state = normalize_execution_state(from_state) or "pending"
+    to_state = normalize_execution_state(to_state) or "pending"
+
+    if from_state == "failed":
+        if to_state == "executed":
+            return ("success", "Reintento completado. Revisa abajo el resultado actualizado.")
+        if to_state == "preview":
+            return ("info", "El reintento dejo una nueva propuesta previa. Revisa abajo desde que punto continuar.")
+        return ("warning", "El reintento se guardo, pero sigue habiendo un fallo. Revisa abajo el error actualizado.")
+
+    if from_state == "preview":
+        if to_state == "executed":
+            return ("success", "La propuesta previa ya se convirtio en un resultado real. Revisa abajo la salida.")
+        if to_state == "failed":
+            return ("warning", "La continuacion termino en fallo. Revisa abajo el error actualizado.")
+        return ("info", "La propuesta previa se actualizo. Revisa abajo la version actual antes de seguir.")
+
+    if from_state in {"pending", "draft"}:
+        if to_state == "executed":
+            return ("success", "La tarea ya tiene un primer resultado. Revisa abajo la salida generada.")
+        if to_state == "preview":
+            return ("info", "La tarea dejo de estar pendiente y ahora tiene una propuesta previa lista para continuar.")
+        if to_state == "failed":
+            return ("warning", "La tarea se intento ejecutar pero termino en fallo. Revisa abajo el error.")
+        return ("info", "La tarea sigue preparada para ejecutarse.")
+
+    if from_state == "executed":
+        if to_state == "executed":
+            return ("success", "Se genero una nueva ejecucion. Revisa abajo el resultado mas reciente.")
+        if to_state == "failed":
+            return ("warning", "La re-ejecucion termino en fallo. Revisa abajo el error.")
+        return ("info", "La tarea se actualizo. Revisa abajo el nuevo estado.")
+
+    return ("info", "La tarea se actualizo. Revisa abajo el estado y el bloque principal.")
 
 
 def build_reentry_context(task, state: str, latest_run, trace: Optional[dict], visible_output: str) -> dict:
@@ -3291,6 +3362,7 @@ def project_view():
 
         current_state = task_execution_state(task)
         trace_key = f"trace_{tid}"
+        followthrough_key = f"followthrough_{tid}"
         task_input = build_task_input_from_rows(task, project)
         current_decision = execution_service.decision_engine.decide(task_input)
         execution_prompt = build_execution_prompt(task_input)
@@ -3305,6 +3377,7 @@ def project_view():
         )
         is_first_execution = trace.get("is_first_execution", False) if trace else False
         reentry_states = {"failed", "preview", "pending", "draft"}
+        followthrough = st.session_state.pop(followthrough_key, None)
         if current_state in reentry_states:
             reentry_context = build_reentry_context(task, current_state, latest_run, trace, visible_output)
             st.markdown("#### Contexto para retomar")
@@ -3320,6 +3393,18 @@ def project_view():
                     st.warning(f"{reentry_context['snippet_label']}: {reentry_context['snippet_text']}")
                 else:
                     st.info(f"{reentry_context['snippet_label']}: {reentry_context['snippet_text']}")
+
+        if followthrough:
+            feedback_level, feedback_message = build_followthrough_feedback(
+                followthrough.get("from_state", ""),
+                followthrough.get("to_state", current_state),
+            )
+            if feedback_level == "success":
+                st.success(feedback_message)
+            elif feedback_level == "warning":
+                st.warning(feedback_message)
+            else:
+                st.info(feedback_message)
 
         display_execution_view(current_decision, task_input, execution_prompt, trace)
         if current_state not in reentry_states:
@@ -3360,11 +3445,7 @@ def project_view():
 
             # Mostrar progreso visual (no spinner genérico)
             progress_placeholder = st.empty()
-            status_messages = [
-                "Analizando tu tarea...",
-                "Seleccionando el mejor modo...",
-                "Ejecutando..."
-            ]
+            status_messages = task_execution_progress_messages(current_state)
 
             for idx, msg in enumerate(status_messages):
                 progress_placeholder.info(f"⏳ {msg}")
@@ -3499,6 +3580,10 @@ Para obtener el resultado real, conecta un motor en Configuración.
                 "error_message": result.error.message if result.error else None,
                 "execution_prompt": execution_prompt,
                 "is_first_execution": is_first_execution,  # Flag para momento WOW
+            }
+            st.session_state[followthrough_key] = {
+                "from_state": current_state,
+                "to_state": execution_status,
             }
             st.rerun()
 
