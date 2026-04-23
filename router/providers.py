@@ -37,8 +37,6 @@ class GeminiProvider(BaseProvider):
         self.validated_models = set()
         self._init_client()
 
-        # Validar modelos esperados una sola vez al startup
-        self._validate_expected_models()
 
     def _init_client(self):
         """Inicializa el cliente de Gemini y valida disponibilidad."""
@@ -54,14 +52,7 @@ class GeminiProvider(BaseProvider):
         # Crear cliente con API key
         self.client = self.genai.Client(api_key=self.api_key)
 
-        # Validar que el cliente funciona
-        try:
-            self._validate_api_connection()
-        except Exception as e:
-            raise ValueError(
-                f"No se puede conectar con Gemini API: {str(e)}. "
-                "Verifica que tu API key es válida."
-            )
+        # Avoid remote validation during Streamlit reruns; execution reports API errors.
 
     def _validate_api_connection(self):
         """Valida que la API key funciona (llamada única)."""
