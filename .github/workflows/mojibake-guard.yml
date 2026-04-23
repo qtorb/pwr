@@ -1,0 +1,21 @@
+name: Mojibake Guard
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  mojibake-guard:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Detect mojibake signatures
+        run: python check_mojibake.py
