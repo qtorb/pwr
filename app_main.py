@@ -410,7 +410,7 @@ def init_db() -> None:
         normalize_existing_task_states(conn)
 
         # ==================== Model Catalog (Bloque D - ACTIVO) ====================
-        # Tabla viva para catÃ¡logo de modelos y configuraciÃ³n de modos del Router
+        # Tabla viva para catálogo de modelos y configuración de modos del Router
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS model_catalog (
@@ -426,20 +426,20 @@ def init_db() -> None:
                 mode TEXT,                               -- "eco" o "racing" [BRIDGE TEMPORAL]
                 is_internal INTEGER DEFAULT 0,           -- 1=mock/test, 0=real/public
                 deprecated_at TEXT,                      -- ISO timestamp si deprecated
-                updated_at TEXT NOT NULL                 -- CuÃ¡ndo fue actualizado
+                updated_at TEXT NOT NULL                 -- Cuándo fue actualizado
             )
             """
         )
 
-        # NOTA: 'mode' es BRIDGE TEMPORAL para esta iteraciÃ³n (Bloque D)
-        # FUTURO (Bloque E+): 'mode' migrarÃ¡ a tabla separada 'router_policy'
-        # que tendrÃ¡ reglas de decisiÃ³n (scoring, umbrales, etc.)
-        # No abstraer policy ahora. Mantener 'mode' aquÃ­ temporalmente.
+        # NOTA: 'mode' es BRIDGE TEMPORAL para esta iteración (Bloque D)
+        # FUTURO (Bloque E+): 'mode' migrará a tabla separada 'router_policy'
+        # que tendrá reglas de decisión (scoring, umbrales, etc.)
+        # No abstraer policy ahora. Mantener 'mode' aquí temporalmente.
 
         # ===== Seeds iniciales model_catalog (garantizan equivalencia) =====
         catalog_count = conn.execute("SELECT COUNT(*) FROM model_catalog").fetchone()[0]
         if catalog_count == 0:
-            # Eco: rÃ¡pido, barato
+            # Eco: rápido, barato
             conn.execute("""
                 INSERT INTO model_catalog
                 (provider, model_name, pricing_input_per_mtok, pricing_output_per_mtok,
@@ -475,7 +475,7 @@ def init_db() -> None:
             """, ('mock', 'mock-racing', 0.0, 0.0, 1000000,
                   '{"vision":false,"reasoning":false}', 0.30, 'active', 'racing', 1, now_iso()))
 
-        # ===== Executions History (Bloque E0: schema preparado, sin persistencia aÃºn) =====
+        # ===== Executions History (Bloque E0: schema preparado, sin persistencia aún) =====
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS executions_history (
@@ -496,7 +496,7 @@ def init_db() -> None:
                 run_fingerprint TEXT DEFAULT '',
                 artifact_md_path TEXT DEFAULT '',
                 artifact_json_path TEXT DEFAULT '',
-                executed_at TEXT NOT NULL,        -- timestamp de ejecuciÃ³n
+                executed_at TEXT NOT NULL,        -- timestamp de ejecución
                 created_at TEXT NOT NULL,         -- timestamp de registro (ahora)
                 FOREIGN KEY(task_id) REFERENCES tasks(id),
                 FOREIGN KEY(project_id) REFERENCES projects(id)
@@ -535,10 +535,10 @@ def init_db() -> None:
                     (
                         "Portable Work Router",
                         make_slug("Portable Work Router"),
-                        "Router de trabajo con mÃºltiples LLM.",
+                        "Router de trabajo con múltiples LLM.",
                         "Organizar tareas, contexto y activos portables.",
                         "Proyecto centrado en ordenar trabajo con LLMs para heavy users fuera del IDE.",
-                        "Todo en castellano. Sin emojis. EstÃ©tica sobria B2B.",
+                        "Todo en castellano. Sin emojis. Estética sobria B2B.",
                         json.dumps(["pwr", "producto", "ia"], ensure_ascii=False),
                         1,
                         created,
@@ -549,8 +549,8 @@ def init_db() -> None:
                         make_slug("RosmarOps"),
                         "SEO adversarial y ciberseguridad.",
                         "Explorar contenidos, herramientas y posicionamiento.",
-                        "Proyecto centrado en SEO adversarial, seguridad y contenidos tÃ©cnicos.",
-                        "Priorizar claridad tÃ©cnica y tono sobrio.",
+                        "Proyecto centrado en SEO adversarial, seguridad y contenidos técnicos.",
+                        "Priorizar claridad técnica y tono sobrio.",
                         json.dumps(["rosmarops", "seo", "seguridad"], ensure_ascii=False),
                         1,
                         created,
@@ -620,7 +620,7 @@ def get_project(project_id: int) -> Optional[sqlite3.Row]:
 def update_project(project_id: int, name: str, description: str, objective: str, base_context: str, base_instructions: str, tags: str) -> None:
     import re
 
-    # Regenerar slug si el nombre cambiÃ³
+    # Regenerar slug si el nombre cambió
     slug = re.sub(r'[^\w\s-]', '', name.lower()).strip()
     slug = re.sub(r'[-\s]+', '-', slug)
     if not slug:
@@ -1065,18 +1065,18 @@ def save_execution_result(
     llm_output: str,
     useful_extract: str,
     execution_status: str = "executed",  # "executed" (real), "preview" (demo), "failed" (error)
-    router_metrics: Optional[dict] = None  # Bloque E0: mÃ©tricas estructuradas JSON
+    router_metrics: Optional[dict] = None  # Bloque E0: métricas estructuradas JSON
 ) -> None:
     """
-    Guarda resultado de ejecuciÃ³n o propuesta previa con mÃ©tricas estructuradas.
+    Guarda resultado de ejecución o propuesta previa con métricas estructuradas.
 
     Args:
         task_id: ID de la tarea
         model_used: Modelo usado
-        router_summary: Resumen de decisiÃ³n del Router
+        router_summary: Resumen de decisión del Router
         llm_output: Output (real o demo)
-        useful_extract: Extracto para referencia rÃ¡pida
-        execution_status: "executed" (ejecuciÃ³n real) | "preview" (propuesta previa sin Gemini) | "failed" (error)
+        useful_extract: Extracto para referencia rápida
+        execution_status: "executed" (ejecución real) | "preview" (propuesta previa sin Gemini) | "failed" (error)
         router_metrics: Dict con mode, model, provider, latency_ms, estimated_cost, complexity_score, status, reasoning_path, executed_at
     """
     # Serializar router_metrics a JSON (Bloque E0)
@@ -1147,11 +1147,11 @@ def get_project_assets(project_id: int) -> List[sqlite3.Row]:
 # ==================== BLOQUE E1: RADAR SNAPSHOT LAYER ====================
 def build_radar_snapshot(internal: bool = False) -> dict:
     """
-    Construye snapshot del catÃ¡logo vivo (E1a: Snapshot Layer).
+    Construye snapshot del catálogo vivo (E1a: Snapshot Layer).
 
-    Esta es la FUENTE ÃšNICA para Radar v1. EstÃ¡ diseÃ±ada para ser reutilizable:
+    Esta es la FUENTE ÚNICA para Radar v1. Está diseñada para ser reutilizable:
     - Hoy: renderizada en vista Streamlit
-    - MaÃ±ana: exportable a JSON, API REST, dashboards externos
+    - Mañana: exportable a JSON, API REST, dashboards externos
 
     Responsabilidades:
     - Conectar a BD
@@ -1181,11 +1181,11 @@ def build_radar_snapshot(internal: bool = False) -> dict:
         }
 
     NOTA IMPORTANTE: "Radar v1 = Live Catalog Snapshot"
-    - âœ… QUÃ‰ estÃ¡ disponible hoy (providers, modelos, modos)
-    - âŒ NO es observatorio histÃ³rico
-    - âŒ NO es benchmarking
-    - âŒ NO es health monitor
-    - âŒ NO es scoring adaptativo
+    - ✅ QUÉ está disponible hoy (providers, modelos, modos)
+    - ❌ NO es observatorio histórico
+    - ❌ NO es benchmarking
+    - ❌ NO es health monitor
+    - ❌ NO es scoring adaptativo
     """
     try:
         with get_conn() as conn:
@@ -1945,7 +1945,7 @@ def inject_css():
 
 
 def render_pwr_header():
-    """Renderiza header superior con navegaciÃ³n principal."""
+    """Renderiza header superior con navegación principal."""
     current_view = st.session_state.get("view", "home")
     col_brand, col_nav_init, col_nav_tasks, col_nav_projects, col_nav_radar, col_actions = st.columns([1.2, 1.2, 1.2, 1.5, 1.2, 2], gap="small")
     
@@ -2010,7 +2010,7 @@ def render_header():
             """
             <div class="card">
                 <h1 style="margin:0;">Portable Work Router</h1>
-                <div class="muted">Selecciona un proyecto, captura una tarea y conviÃ©rtela en trabajo reusable.</div>
+                <div class="muted">Selecciona un proyecto, captura una tarea y conviértela en trabajo reusable.</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -2070,7 +2070,7 @@ def get_projects_with_activity() -> List[Dict]:
 def format_time_ago(iso_string: str) -> str:
     """Convert ISO timestamp to human-readable 'time ago' format"""
     if not iso_string:
-        return "â€”"
+        return "—"
     try:
         from datetime import datetime
         dt = datetime.fromisoformat(iso_string)
@@ -2080,7 +2080,7 @@ def format_time_ago(iso_string: str) -> str:
         if diff.days > 7:
             return "Hace 1+ semanas"
         elif diff.days > 0:
-            return f"Hace {diff.days} dÃ­a{'s' if diff.days > 1 else ''}"
+            return f"Hace {diff.days} día{'s' if diff.days > 1 else ''}"
         elif diff.seconds > 3600:
             hours = diff.seconds // 3600
             return f"Hace {hours} hora{'s' if hours > 1 else ''}"
@@ -2095,18 +2095,18 @@ def format_time_ago(iso_string: str) -> str:
 
 def generate_demo_proposal(decision, task_input: "TaskInput") -> dict:
     """
-    Genera propuesta previa Ãºtil cuando no hay proveedor real.
+    Genera propuesta previa útil cuando no hay proveedor real.
 
-    No ejecuta nada. Solo usa el anÃ¡lisis del Router para mostrar:
-    - QuÃ© ha entendido el sistema
-    - CÃ³mo lo resolverÃ­a
+    No ejecuta nada. Solo usa el análisis del Router para mostrar:
+    - Qué ha entendido el sistema
+    - Cómo lo resolvería
     - Prioridades
     - Prompt sugerido
     - Estimaciones
 
     Args:
         decision: RoutingDecision del Router
-        task_input: TaskInput con titulo, descripciÃ³n, contexto
+        task_input: TaskInput con titulo, descripción, contexto
 
     Returns:
         dict con:
@@ -2122,7 +2122,7 @@ def generate_demo_proposal(decision, task_input: "TaskInput") -> dict:
             "cost_estimate": str
         }
     """
-    # Extraer informaciÃ³n del RouterDecision y TaskInput
+    # Extraer información del RouterDecision y TaskInput
     title = task_input.title.strip()
     description = task_input.description.strip()
     context = task_input.context.strip()
@@ -2130,15 +2130,15 @@ def generate_demo_proposal(decision, task_input: "TaskInput") -> dict:
 
     # Mapeos para estimaciones
     if mode == "eco":
-        time_estimate = "~2â€“4s"
+        time_estimate = "~2–4s"
         cost_estimate = "bajo"
-        mode_label = "rÃ¡pido y preciso"
+        mode_label = "rápido y preciso"
     else:  # racing
-        time_estimate = "~10â€“30s"
+        time_estimate = "~10–30s"
         cost_estimate = "medio-alto"
-        mode_label = "anÃ¡lisis profundo y detallado"
+        mode_label = "análisis profundo y detallado"
 
-    # Generar "QuÃ© he entendido" (resumen natural de la tarea)
+    # Generar "Qué he entendido" (resumen natural de la tarea)
     understood_parts = []
     if title:
         understood_parts.append(f"Quieres {title.lower()}")
@@ -2150,23 +2150,23 @@ def generate_demo_proposal(decision, task_input: "TaskInput") -> dict:
     understood = ", ".join(understood_parts) if understood_parts else "Analizar una tarea"
     understood = understood[0].upper() + understood[1:] + "."
 
-    # Generar "CÃ³mo lo resolverÃ­a" basado en modo y seÃ±ales
+    # Generar "Cómo lo resolvería" basado en modo y señales
     if mode == "eco":
-        strategy = f"Lo abordarÃ­a de forma rÃ¡pida, enfocÃ¡ndome en lo esencial y devolviendo una respuesta clara y directa."
+        strategy = f"Lo abordaría de forma rápida, enfocándome en lo esencial y devolviendo una respuesta clara y directa."
     else:
-        strategy = f"Lo abordarÃ­a con anÃ¡lisis profundo, considerando alternativas y devolviendo una recomendaciÃ³n fundamentada."
+        strategy = f"Lo abordaría con análisis profundo, considerando alternativas y devolviendo una recomendación fundamentada."
 
-    # Prioridades claras segÃºn modo
-    priority = "velocidad y claridad" if mode == "eco" else "precisiÃ³n y profundidad"
+    # Prioridades claras según modo
+    priority = "velocidad y claridad" if mode == "eco" else "precisión y profundidad"
 
     # Salida esperada (inferida del tipo de tarea)
     task_type = task_input.task_type or "Pensar"
     expected_output_map = {
-        "Pensar": "anÃ¡lisis estructurado con recomendaciones",
+        "Pensar": "análisis estructurado con recomendaciones",
         "Escribir": "contenido claro y listo para usar",
-        "Programar": "cÃ³digo funcional y documentado",
-        "Revisar": "evaluaciÃ³n con puntos de mejora",
-        "Decidir": "comparaciÃ³n de opciones con recomendaciÃ³n",
+        "Programar": "código funcional y documentado",
+        "Revisar": "evaluación con puntos de mejora",
+        "Decidir": "comparación de opciones con recomendación",
     }
     expected_output = expected_output_map.get(task_type, "respuesta clara y estructurada")
 
@@ -2191,8 +2191,8 @@ def display_demo_mode_panel(demo_proposal: dict) -> None:
     Muestra panel de propuesta previa cuando no hay proveedor real.
 
     Estructura:
-    - QuÃ© he entendido
-    - CÃ³mo lo resolverÃ­a
+    - Qué he entendido
+    - Cómo lo resolvería
     - Prompt sugerido
     - Para resultado real: configurar motor
 
@@ -2202,19 +2202,19 @@ def display_demo_mode_panel(demo_proposal: dict) -> None:
     st.write("")  # Espaciado
 
     # Header: Propuesta previa (no "demo", es preview operativa)
-    st.markdown("### âœ¨ Propuesta previa")
-    st.caption("La ejecuciÃ³n real requiere conectar un motor")
+    st.markdown("### ✨ Propuesta previa")
+    st.caption("La ejecución real requiere conectar un motor")
 
     st.write("")
 
-    # Bloque 1: QuÃ© he entendido
-    st.markdown("**ðŸ§  QuÃ© he entendido**")
+    # Bloque 1: Qué he entendido
+    st.markdown("**🧠 Qué he entendido**")
     st.write(demo_proposal["understood"])
 
     st.write("")
 
-    # Bloque 2: CÃ³mo lo resolverÃ­a
-    st.markdown("**ðŸŽ¯ CÃ³mo lo resolverÃ­a**")
+    # Bloque 2: Cómo lo resolvería
+    st.markdown("**🎯 Cómo lo resolvería**")
     st.write(demo_proposal["strategy"])
     st.caption(f"**Prioridad:** {demo_proposal['priority']}")
     st.caption(f"**Salida esperada:** {demo_proposal['expected_output']}")
@@ -2231,49 +2231,49 @@ def display_demo_mode_panel(demo_proposal: dict) -> None:
     st.info(
         f"**Modo:** {demo_proposal['mode'].upper()} | "
         f"**Modelo:** {demo_proposal['model']} | "
-        f"â±ï¸ {demo_proposal['time_estimate']} | "
-        f"ðŸ’° {demo_proposal['cost_estimate']}"
+        f"⏱️ {demo_proposal['time_estimate']} | "
+        f"💰 {demo_proposal['cost_estimate']}"
     )
 
     st.write("")
-    st.caption("Para generar el resultado real, conecta un motor en ConfiguraciÃ³n")
+    st.caption("Para generar el resultado real, conecta un motor en Configuración")
 
 
 def display_decision_preview(decision, task_title: str):
     """
-    Muestra la decisiÃ³n del Router de forma clara y atractiva.
+    Muestra la decisión del Router de forma clara y atractiva.
 
     Estructura:
-    ðŸ’¡ CÃ³mo lo voy a resolver
+    💡 Cómo lo voy a resolver
 
-    Modo recomendado: ECO (rÃ¡pido) / RACING (anÃ¡lisis profundo)
+    Modo recomendado: ECO (rápido) / RACING (análisis profundo)
     Motivo: [reasoning]
 
-    Tiempo estimado: ~2â€“4s / ~10â€“30s
+    Tiempo estimado: ~2–4s / ~10–30s
     Coste estimado: bajo / medio-alto
     """
     if not decision or not task_title.strip():
         return
 
-    mode_emoji = "ðŸŸ¢" if decision.mode == "eco" else "ðŸ”µ"
-    mode_label = "ECO (rÃ¡pido)" if decision.mode == "eco" else "RACING (anÃ¡lisis profundo)"
+    mode_emoji = "🟢" if decision.mode == "eco" else "🔵"
+    mode_label = "ECO (rápido)" if decision.mode == "eco" else "RACING (análisis profundo)"
 
     # Estimaciones basadas en modo
     if decision.mode == "eco":
-        time_est = "~2â€“4s"
+        time_est = "~2–4s"
         cost_level = "bajo"
     else:
-        time_est = "~10â€“30s"
+        time_est = "~10–30s"
         cost_level = "medio-alto"
 
     st.info("")  # Espaciado visual
-    st.markdown("### ðŸ’¡ CÃ³mo lo voy a resolver")
+    st.markdown("### 💡 Cómo lo voy a resolver")
     st.markdown(f"**Modo recomendado:** {mode_label}")
     st.caption(f"Proveedor/modelo real: {decision.provider} / {decision.model}")
 
-    # Extraer motivo del reasoning_path (primera lÃ­nea o primera oraciÃ³n)
+    # Extraer motivo del reasoning_path (primera línea o primera oración)
     reasoning_lines = decision.reasoning_path.split("\n")
-    motivo = reasoning_lines[0] if reasoning_lines else "DecisiÃ³n automÃ¡tica"
+    motivo = reasoning_lines[0] if reasoning_lines else "Decisión automática"
     st.markdown(f"**Motivo:** {motivo}")
 
     st.write("")  # Espaciado
@@ -2281,9 +2281,9 @@ def display_decision_preview(decision, task_title: str):
     # Metadata: Tiempo y Coste (formato compacto)
     col1, col2 = st.columns(2)
     with col1:
-        st.caption(f"â±ï¸ Tiempo estimado: {time_est}")
+        st.caption(f"⏱️ Tiempo estimado: {time_est}")
     with col2:
-        st.caption(f"ðŸ’° Coste estimado: {cost_level}")
+        st.caption(f"💰 Coste estimado: {cost_level}")
 
 
 def display_execution_view(decision, task_input: TaskInput, execution_prompt: str, trace: Optional[dict] = None) -> None:
@@ -2306,13 +2306,13 @@ def display_execution_view(decision, task_input: TaskInput, execution_prompt: st
         "instrucciones base" if task_input.project_base_instructions.strip() else "sin instrucciones base",
         "contexto temporal" if task_input.context.strip() else "sin contexto temporal",
     ]
-    st.caption("Incluye: " + " Â· ".join(included))
+    st.caption("Incluye: " + " · ".join(included))
 
     if trace and trace.get("status") and trace.get("status") != "pending":
         status = trace.get("status")
         latency = trace.get("latency_ms", 0)
         cost = trace.get("estimated_cost", 0)
-        st.caption(f"Ultima ejecucion: {status} Â· ~{latency}ms Â· ${cost:.4f}")
+        st.caption(f"Ultima ejecucion: {status} · ~{latency}ms · ${cost:.4f}")
 
     with st.expander("Contenido que se ejecuta", expanded=False):
         st.code(execution_prompt, language="text")
@@ -2320,13 +2320,13 @@ def display_execution_view(decision, task_input: TaskInput, execution_prompt: st
 
 def display_onboarding_result(result, task_input, is_first_execution: bool = True, project_name: str = None, task_name: str = None):
     """
-    H: Muestra resultado de ejecuciÃ³n con persistencia visible
+    H: Muestra resultado de ejecución con persistencia visible
 
     1. Resultado - contenido principal
-    2. "Guardado en" - secciÃ³n clara y sobria (no cÃ©lÃ©braciÃ³n)
-    3. Acciones jerÃ¡rquicas: Ver proyecto (PRIMARIA) > Reutilizar/Crear (SECUNDARIAS) > Copiar (TERCIARIA)
+    2. "Guardado en" - sección clara y sobria (no célébración)
+    3. Acciones jerárquicas: Ver proyecto (PRIMARIA) > Reutilizar/Crear (SECUNDARIAS) > Copiar (TERCIARIA)
 
-    PropÃ³sito: Cerrar con claridad, tranquilidad, persistencia visible y siguiente paso obvio
+    Propósito: Cerrar con claridad, tranquilidad, persistencia visible y siguiente paso obvio
     """
     if not result or result.status == "error":
         return
@@ -2334,16 +2334,16 @@ def display_onboarding_result(result, task_input, is_first_execution: bool = Tru
     st.write("")  # Espaciado
 
     # ==================== RESULTADO PRINCIPAL ====================
-    st.markdown("### ðŸ“‹ Resultado")
+    st.markdown("### 📋 Resultado")
     st.markdown(result.output_text)
 
     st.write("")  # Espaciado
 
     # ==================== BLOQUE: Guardado en (sobrio y tranquilizador) ====================
-    # SecciÃ³n muy compacta, clara, sin celebraciÃ³n
+    # Sección muy compacta, clara, sin celebración
     col1, col2 = st.columns([0.08, 0.92])
     with col1:
-        st.markdown("âœ…")
+        st.markdown("✅")
     with col2:
         st.markdown("**Guardado**")
 
@@ -2351,12 +2351,12 @@ def display_onboarding_result(result, task_input, is_first_execution: bool = Tru
         st.caption(f"En: **{project_name[:40]}**")
         st.caption(f"Tarea: **{task_name[:50]}**")
 
-    st.write("")  # Espaciado pequeÃ±o
+    st.write("")  # Espaciado pequeño
 
-    # ==================== ACCIÃ“N PRIMARIA: Ver en proyecto ====================
-    # CTA clara que guÃ­a sin aplastar el resultado
-    if st.button("ðŸ“‚ Ver en proyecto", use_container_width=True, type="primary", key="result_view_project"):
-        # Guarda datos para que home/project_view sepan dÃ³nde ir
+    # ==================== ACCIÓN PRIMARIA: Ver en proyecto ====================
+    # CTA clara que guía sin aplastar el resultado
+    if st.button("📂 Ver en proyecto", use_container_width=True, type="primary", key="result_view_project"):
+        # Guarda datos para que home/project_view sepan dónde ir
         if "project_id" in st.session_state.get("onboard_result", {}):
             st.session_state["active_project_id"] = st.session_state["onboard_result"]["project_id"]
         st.session_state["view"] = "home"
@@ -2364,13 +2364,13 @@ def display_onboarding_result(result, task_input, is_first_execution: bool = Tru
 
     st.write("")  # Espaciado
 
-    # ==================== ACCIONES SECUNDARIAS: MÃ¡s opciones ====================
-    st.caption("MÃ¡s acciones:")
+    # ==================== ACCIONES SECUNDARIAS: Más opciones ====================
+    st.caption("Más acciones:")
 
     col1, col2 = st.columns(2, gap="small")
 
     with col1:
-        if st.button("ðŸ”„ Usar como contexto", use_container_width=True, key="result_use_context"):
+        if st.button("🔄 Usar como contexto", use_container_width=True, key="result_use_context"):
             # Guarda resultado para pasar como contexto a nueva tarea
             extract = result.output_text[:500]
             st.session_state["context_from_result"] = extract
@@ -2378,17 +2378,17 @@ def display_onboarding_result(result, task_input, is_first_execution: bool = Tru
             st.rerun()
 
     with col2:
-        if st.button("ðŸŽ¯ Crear tarea relacionada", use_container_width=True, key="result_create_related"):
+        if st.button("🎯 Crear tarea relacionada", use_container_width=True, key="result_create_related"):
             # Abre new_task en el proyecto actual
             if "project_id" in st.session_state.get("onboard_result", {}):
                 st.session_state["active_project_id"] = st.session_state["onboard_result"]["project_id"]
             st.session_state["view"] = "new_task"
             st.rerun()
 
-    st.write("")  # Espaciado pequeÃ±o
+    st.write("")  # Espaciado pequeño
 
-    # ==================== ACCIÃ“N TERCIARIA: Copiar (expandible, discreta) ====================
-    with st.expander("ðŸ“‹ Copiar resultado", expanded=False):
+    # ==================== ACCIÓN TERCIARIA: Copiar (expandible, discreta) ====================
+    with st.expander("📋 Copiar resultado", expanded=False):
         extract = result.output_text[:700]
         st.text_area("",
                      value=extract,
@@ -2398,21 +2398,21 @@ def display_onboarding_result(result, task_input, is_first_execution: bool = Tru
         st.caption("Selecciona y copia el texto que necesites")
 
 
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ════════════════════════════════════════════════════════════════════════════════
 # BLOQUE E1: RADAR SNAPSHOT LAYER + VISTA
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# ════════════════════════════════════════════════════════════════════════════════
 # Snapshot function: Aislada, limpia, reutilizable
-# Preparada para extraer a mÃ³dulo propio si es necesario (E2+)
-# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# Preparada para extraer a módulo propio si es necesario (E2+)
+# ════════════════════════════════════════════════════════════════════════════════
 
 def build_radar_snapshot(internal: bool = False) -> dict:
     """
-    Construye snapshot del catÃ¡logo vivo (E1a - Snapshot Layer).
+    Construye snapshot del catálogo vivo (E1a - Snapshot Layer).
 
     Responsabilidades:
     - Conectar a BD
     - Instanciar ModelCatalog desde datos vivos
-    - Exportar catÃ¡logo con filtrado de is_internal
+    - Exportar catálogo con filtrado de is_internal
     - Envolver con metadata clara
 
     Args:
@@ -2423,18 +2423,18 @@ def build_radar_snapshot(internal: bool = False) -> dict:
         Dict con estructura:
         {
             "status": "ok" | "error",
-            "radar": {...},        # CatÃ¡logo vivo
+            "radar": {...},        # Catálogo vivo
             "metadata": {...}      # Metadata y framing
         }
 
-    NOTA: Esta funciÃ³n es REUTILIZABLE para:
+    NOTA: Esta función es REUTILIZABLE para:
     - Renderizar en Streamlit (E1b)
     - Exportar a JSON (E2+)
     - Consumir en API REST (E3+)
-    Sin cambios de lÃ³gica, solo transporte.
+    Sin cambios de lógica, solo transporte.
 
     Bloque E1: Live Catalog Snapshot
-    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    ═════════════════════════════════════════════════════════════════════
     """
     try:
         with get_conn() as conn:
@@ -2448,7 +2448,7 @@ def build_radar_snapshot(internal: bool = False) -> dict:
                 "generated_at": now_iso(),
                 "radar_version": "1.0",
                 "catalog_source": "model_catalog BD",
-                "framing": "live catalog snapshot â€“ NOT observatorio histÃ³rico, NOT benchmarking, NOT health monitor, NOT adaptive scoring",
+                "framing": "live catalog snapshot – NOT observatorio histórico, NOT benchmarking, NOT health monitor, NOT adaptive scoring",
                 "note": "Mode = temporal bridge to router_policy table (future)",
                 "include_internal": internal
             }
@@ -2466,10 +2466,10 @@ def build_radar_snapshot(internal: bool = False) -> dict:
 
 def radar_view() -> None:
     """
-    Vista Streamlit: Radar v1 - CatÃ¡logo vivo visible (E1b).
+    Vista Streamlit: Radar v1 - Catálogo vivo visible (E1b).
 
     Estructura minimalista con narrativa de producto:
-    - Encabezado + explicaciÃ³n clara
+    - Encabezado + explicación clara
     - Resumen: providers, modelos, modos
     - Listado detallado por provider
     - Metadata transparente
@@ -2477,18 +2477,18 @@ def radar_view() -> None:
     # ==================== ENCABEZADO ====================
     col1, col2 = st.columns([0.1, 0.9])
     with col1:
-        st.write("ðŸ“¡")
+        st.write("📡")
     with col2:
         st.title("Radar")
 
     st.markdown("""
-    **CatÃ¡logo vivo de PWR** â€” QuÃ© modelos y modos tiene PWR para ayudarte a decidir cÃ³mo abordar tareas.
+    **Catálogo vivo de PWR** — Qué modelos y modos tiene PWR para ayudarte a decidir cómo abordar tareas.
 
-    AquÃ­ ves la configuraciÃ³n en tiempo real que PWR consulta para elegir
-    el modelo mÃ¡s adecuado (eco: rÃ¡pido/barato, racing: potente/caro).
+    Aquí ves la configuración en tiempo real que PWR consulta para elegir
+    el modelo más adecuado (eco: rápido/barato, racing: potente/caro).
 
-    âš ï¸ Esto NO es observatorio histÃ³rico. NO ves cuÃ¡ndo se usÃ³ cada modelo.
-    Solo el catÃ¡logo de disponibilidad.
+    ⚠️ Esto NO es observatorio histórico. NO ves cuándo se usó cada modelo.
+    Solo el catálogo de disponibilidad.
     """)
 
     st.divider()
@@ -2496,72 +2496,72 @@ def radar_view() -> None:
     # ==================== SNAPSHOT ====================
     # Controlar si mostrar internos
     show_internal = st.checkbox(
-        "ðŸ”§ Mostrar modelos internos (debug)",
+        "🔧 Mostrar modelos internos (debug)",
         value=False,
         help="Modelos mock/test solo para desarrollo"
     )
 
-    # Construir snapshot (funciÃ³n reutilizable)
+    # Construir snapshot (función reutilizable)
     snapshot = build_radar_snapshot(internal=show_internal)
 
     if snapshot["status"] != "ok":
-        st.error(f"âš ï¸ Error: {snapshot.get('error', 'Unknown error')}")
+        st.error(f"⚠️ Error: {snapshot.get('error', 'Unknown error')}")
         return
 
     radar_data = snapshot["radar"]
     metadata = snapshot["metadata"]
 
     # ==================== RESUMEN ====================
-    st.subheader("ðŸ“Š Resumen")
+    st.subheader("📊 Resumen")
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("ðŸ”Œ Providers", radar_data["summary"]["total_providers"])
+        st.metric("🔌 Providers", radar_data["summary"]["total_providers"])
     with col2:
-        st.metric("ðŸ¤– Modelos", radar_data["summary"]["total_models"])
+        st.metric("🤖 Modelos", radar_data["summary"]["total_models"])
     with col3:
-        st.metric("âš™ï¸ Modos", len(radar_data["summary"]["modes_list"]))
+        st.metric("⚙️ Modos", len(radar_data["summary"]["modes_list"]))
     with col4:
-        st.metric("ðŸ“Œ Por defecto", radar_data["summary"]["default_mode"])
+        st.metric("📌 Por defecto", radar_data["summary"]["default_mode"])
 
     st.write("")
 
     # ==================== PROVIDERS ====================
-    st.subheader("ðŸ”Œ Providers y Modelos")
+    st.subheader("🔌 Providers y Modelos")
 
     for provider_name in sorted(radar_data["providers"].keys()):
         provider = radar_data["providers"][provider_name]
 
-        with st.expander(f"**{provider_name.upper()}** Â· {len(provider['models'])} modelo(s)", expanded=True):
+        with st.expander(f"**{provider_name.upper()}** · {len(provider['models'])} modelo(s)", expanded=True):
             for idx, model in enumerate(provider["models"]):
                 # Header: nombre + status + internal badge
                 col1, col2, col3 = st.columns([0.5, 0.25, 0.25])
 
                 with col1:
-                    status_emoji = "ðŸŸ¢" if model["status"] == "active" else "ðŸŸ¡"
+                    status_emoji = "🟢" if model["status"] == "active" else "🟡"
                     internal_badge = " **[INTERNAL]**" if model["is_internal"] else ""
                     st.markdown(f"{status_emoji} **{model['name']}{internal_badge}**")
 
                 with col2:
-                    st.caption(f"ðŸ“Œ {model['mode'].upper()}")
+                    st.caption(f"📌 {model['mode'].upper()}")
 
                 with col3:
-                    st.caption(f"ðŸ’° ${model['estimated_cost_per_run']:.3f}")
+                    st.caption(f"💰 ${model['estimated_cost_per_run']:.3f}")
 
                 # Capabilities badges
                 caps = model.get("capabilities", {})
                 badges = []
                 if caps.get("vision"):
-                    badges.append("ðŸ‘ï¸ Vision")
+                    badges.append("👁️ Vision")
                 if caps.get("reasoning"):
-                    badges.append("ðŸ§  Reasoning")
+                    badges.append("🧠 Reasoning")
                 if caps.get("code_execution"):
-                    badges.append("ðŸ’» Code")
+                    badges.append("💻 Code")
 
                 if badges:
-                    st.caption("Capacidades: " + " Â· ".join(badges))
+                    st.caption("Capacidades: " + " · ".join(badges))
                 else:
-                    st.caption("Capacidades: â€”")
+                    st.caption("Capacidades: —")
 
                 # Context window
                 st.caption(f"Context window: {model['context_window']:,} tokens")
@@ -2573,7 +2573,7 @@ def radar_view() -> None:
     st.write("")
 
     # ==================== MODES ====================
-    st.subheader("âš™ï¸ Modos de EjecuciÃ³n")
+    st.subheader("⚙️ Modos de Ejecución")
 
     for mode_name in radar_data["summary"]["modes_list"]:
         mode = radar_data["modes"][mode_name]
@@ -2589,12 +2589,12 @@ def radar_view() -> None:
 
     col1, col2 = st.columns([0.7, 0.3])
     with col1:
-        st.caption(f"ðŸ• Generado: {metadata['generated_at']}")
-        st.caption(f"ðŸ“Œ VersiÃ³n: {metadata['radar_version']} Â· Fuente: {metadata['catalog_source']}")
+        st.caption(f"🕐 Generado: {metadata['generated_at']}")
+        st.caption(f"📌 Versión: {metadata['radar_version']} · Fuente: {metadata['catalog_source']}")
 
     with col2:
         if show_internal:
-            st.warning("âš ï¸ Modelos internos incluidos", icon="ðŸ”§")
+            st.warning("⚠️ Modelos internos incluidos", icon="🔧")
 
     st.markdown(f"*{metadata['framing']}*")
     st.markdown(f"*Nota: {metadata['note']}*")
@@ -2604,34 +2604,34 @@ def onboarding_view():
     """
     ESTADO A: Onboarding puro (usuario nuevo, sin actividad previa)
     - INPUT es protagonista visual (primer elemento)
-    - Microfrase mÃ­nima de contexto (no explicaciÃ³n larga)
+    - Microfrase mínima de contexto (no explicación larga)
     - Ejemplos como sugerencias de tarea
     - Preview condicional (solo si input tiene suficiente sentido)
-    - Flujo automÃ¡tico: escribir â†’ ver propuesta â†’ ejecutar â†’ resultado
+    - Flujo automático: escribir → ver propuesta → ejecutar → resultado
     """
     # Inicializar ExecutionService para decisiones
     with get_conn() as conn:
         execution_service = ExecutionService(conn)
 
     # ==================== INPUT PROTAGONISTA ====================
-    st.markdown("**Â¿CuÃ¡l es tu tarea?**")
+    st.markdown("**¿Cuál es tu tarea?**")
 
     capture_title = st.text_area(
         "",
-        placeholder="Resume un documento â€¢ Escribe un email â€¢ Analiza un grÃ¡fico â€¢ PropÃ³n un plan",
+        placeholder="Resume un documento • Escribe un email • Analiza un gráfico • Propón un plan",
         key="onboard_capture_input",
         height=120,
         label_visibility="collapsed"
     )
 
-    # Microfrase mÃ­nima (no protagonista, contexto ligero)
+    # Microfrase mínima (no protagonista, contexto ligero)
     st.caption("PWR elige el mejor modelo para tu tarea")
 
     # ==================== EJEMPLOS COMO SUGERENCIAS ====================
     if not capture_title.strip():
-        st.caption("ðŸ’¡ Sugerencias: resume este documento, escribe un email, analiza un grÃ¡fico")
+        st.caption("💡 Sugerencias: resume este documento, escribe un email, analiza un gráfico")
 
-    st.write("")  # Espaciado pequeÃ±o
+    st.write("")  # Espaciado pequeño
 
     # ==================== PREVIEW CONDICIONAL (solo si input tiene sentido) ====================
     # Preview aparece si input tiene al menos ~20 caracteres (suficiente para ser tarea clara)
@@ -2648,10 +2648,10 @@ def onboarding_view():
             decision = execution_service.decision_engine.decide(task_input)
             display_decision_preview(decision, capture_title)
 
-            st.write("")  # Espaciado pequeÃ±o
+            st.write("")  # Espaciado pequeño
 
-            # ==================== BOTÃ“N (solo si preview mostrado) ====================
-            if st.button("âœ¨ Empezar", use_container_width=True,
+            # ==================== BOTÓN (solo si preview mostrado) ====================
+            if st.button("✨ Empezar", use_container_width=True,
                          key="onboard_capture_btn", type="primary"):
                 # Crear proyecto default
                 projects = get_projects()
@@ -2691,7 +2691,7 @@ def onboarding_view():
                 ]
 
                 for idx, msg in enumerate(status_messages):
-                    progress_placeholder.info(f"â³ {msg}")
+                    progress_placeholder.info(f"⏳ {msg}")
                     import time
                     time.sleep(0.3)
 
@@ -2703,7 +2703,7 @@ def onboarding_view():
                         output = execution_result.output_text
                         extract = output[:700]
                         router_summary = (
-                            f"EjecuciÃ³n completada\n"
+                            f"Ejecución completada\n"
                             f"Modo: {execution_result.routing.mode}\n"
                             f"Modelo: {execution_result.metrics.model_used}\n"
                             f"Motivo:\n- {execution_result.routing.reasoning_path}"
@@ -2750,14 +2750,14 @@ def onboarding_view():
 
                 except Exception as e:
                     progress_placeholder.empty()
-                    st.error(f"Error en ejecuciÃ³n: {str(e)}")
+                    st.error(f"Error en ejecución: {str(e)}")
 
         except Exception as e:
-            st.caption(f"âš ï¸ No se pudo analizar: {str(e)[:50]}...")
+            st.caption(f"⚠️ No se pudo analizar: {str(e)[:50]}...")
 
     # ==================== RESULTADO (solo si completado) ====================
     if st.session_state.get("onboard_result_ready"):
-        st.write("")  # Espaciado pequeÃ±o
+        st.write("")  # Espaciado pequeño
         onboard_data = st.session_state.get("onboard_result", {})
         if onboard_data:
             result = onboard_data.get("result")
@@ -2765,16 +2765,16 @@ def onboarding_view():
             project_id = onboard_data.get("project_id")
             project = get_project(project_id) if project_id else None
             project_name = project["name"] if project else "Mi primer proyecto"
-            # task es sqlite3.Row, usar indexaciÃ³n directa en lugar de .get()
+            # task es sqlite3.Row, usar indexación directa en lugar de .get()
             task_name = task["title"] if task else ""
             display_onboarding_result(result, task, is_first_execution=True, project_name=project_name, task_name=task_name)
 
 
 def new_task_view():
     """
-    ESTADO B: Nueva tarea â€” flujo lineal dedicado
-    - Flujo lineal explÃ­cito: 1. Â¿QuÃ© necesitas? â†’ 2. Propuesta â†’ 3. Detalles â†’ 4. Ejecuta
-    - BotÃ³n "Volver" discreto
+    ESTADO B: Nueva tarea — flujo lineal dedicado
+    - Flujo lineal explícito: 1. ¿Qué necesitas? → 2. Propuesta → 3. Detalles → 4. Ejecuta
+    - Botón "Volver" discreto
     - Sin "Retoma tu trabajo" ni "Tus proyectos"
     """
     # Inicializar ExecutionService
@@ -2784,12 +2784,12 @@ def new_task_view():
     projects = get_projects()
     default_project = projects[0] if projects else None
 
-    # Header: TÃ­tulo + Volver (discreto)
+    # Header: Título + Volver (discreto)
     col1, col2 = st.columns([0.85, 0.15])
     with col1:
-        st.markdown("### Â¿QuÃ© necesitas hacer ahora?")
+        st.markdown("### ¿Qué necesitas hacer ahora?")
     with col2:
-        if st.button("â† Volver", key="new_task_back", use_container_width=True):
+        if st.button("← Volver", key="new_task_back", use_container_width=True):
             st.session_state["view"] = "home"
             st.session_state["home_capture_input"] = ""
             st.rerun()
@@ -2799,12 +2799,12 @@ def new_task_view():
 
     st.write("")  # Espaciado
 
-    # ==================== PASO 1: Â¿QUÃ‰ NECESITAS? ====================
-    st.markdown("### 1. Â¿QuÃ© necesitas?")
+    # ==================== PASO 1: ¿QUÉ NECESITAS? ====================
+    st.markdown("### 1. ¿Qué necesitas?")
 
     capture_title = st.text_area(
         "",
-        placeholder="Ej: resume este documento â€¢ escribe un email â€¢ analiza un excel â€¢ propÃ³n un plan",
+        placeholder="Ej: resume este documento • escribe un email • analiza un excel • propón un plan",
         key="home_capture_input",
         height=90,
         label_visibility="collapsed"
@@ -2812,9 +2812,9 @@ def new_task_view():
 
     st.write("")  # Espaciado
 
-    # ==================== PASO 2: CÃ“MO LO VAMOS A RESOLVER (automÃ¡tico) ====================
+    # ==================== PASO 2: CÓMO LO VAMOS A RESOLVER (automático) ====================
     if capture_title.strip():
-        st.markdown("### 2. CÃ³mo lo vamos a resolver")
+        st.markdown("### 2. Cómo lo vamos a resolver")
 
         task_input = build_task_input(
             task_id=0,
@@ -2836,10 +2836,10 @@ def new_task_view():
         st.markdown("### 3. Detalles (opcional)")
 
         context = ""
-        with st.expander("AÃ±adir contexto"):
+        with st.expander("Añadir contexto"):
             context = st.text_area(
                 "",
-                placeholder="InformaciÃ³n relevante para ejecutar la tarea...",
+                placeholder="Información relevante para ejecutar la tarea...",
                 height=60,
                 key="home_task_context",
                 label_visibility="collapsed"
@@ -2850,7 +2850,7 @@ def new_task_view():
         # ==================== PASO 4: EJECUTA ====================
         st.markdown("### 4. Ejecuta")
 
-        if st.button("âœ¨ Generar propuesta", use_container_width=True, key="home_capture_btn",
+        if st.button("✨ Generar propuesta", use_container_width=True, key="home_capture_btn",
                      disabled=not default_project, type="primary"):
             if default_project and capture_title.strip():
                 tid = create_task(default_project["id"], capture_title, "", TIPOS_TAREA[0], context or "", None)
@@ -2860,7 +2860,7 @@ def new_task_view():
 
 def home_view():
     """
-    ESTADO C: Home de trabajo â€” navegaciÃ³n limpia
+    ESTADO C: Home de trabajo — navegación limpia
     - Dos opciones claras: retomar trabajo O crear algo nuevo
     - Si no hay actividad: llama onboarding_view()
     - Si hay actividad: muestra tareas recientes y proyectos
@@ -2875,12 +2875,12 @@ def home_view():
         onboarding_view()
         return
 
-    # ESTADO C: NavegaciÃ³n de trabajo
-    st.markdown("### ðŸ  Mis tareas")
+    # ESTADO C: Navegación de trabajo
+    st.markdown("### 🏠 Mis tareas")
 
     st.write("")  # Espaciado
 
-    # ==================== SECCIÃ“N: HOY (Historial del dÃ­a) ====================
+    # ==================== SECCIÓN: HOY (Historial del día) ====================
     st.markdown("#### Hoy")
 
     today_tasks = []
@@ -2902,29 +2902,29 @@ def home_view():
         today_tasks = [dict(row) for row in cursor.fetchall()]
 
     if not today_tasks:
-        st.caption("ðŸ“‹ Sin ejecuciones hoy")
+        st.caption("📋 Sin ejecuciones hoy")
     else:
         for task in today_tasks:
             time_ago = format_time_ago(task.get("updated_at", ""))
             col1, col2 = st.columns([0.85, 0.15])
             with col1:
-                st.markdown(f"âœ… **{task['title'][:45]}**")
+                st.markdown(f"✅ **{task['title'][:45]}**")
                 project_name = task.get('project_name') or "Sin proyecto"
-                st.caption(f"{project_name} Â· {time_ago}")
+                st.caption(f"{project_name} · {time_ago}")
             with col2:
-                if st.button("â†’", key=f"home_today_{task['id']}", help="Abrir", use_container_width=True):
+                if st.button("→", key=f"home_today_{task['id']}", help="Abrir", use_container_width=True):
                     open_task_workspace(task["project_id"], task["id"])
                     st.rerun()
 
     st.divider()
 
-    # ==================== OPCIÃ“N 1: RETOMAR TRABAJO ====================
+    # ==================== OPCIÓN 1: RETOMAR TRABAJO ====================
     st.markdown("#### Trabajo en progreso")
 
     recent_tasks = get_recent_executed_tasks(limit=5)
 
     if not recent_tasks:
-        st.caption("ðŸ“‹ Sin tareas ejecutadas aÃºn. Captura una para comenzar.")
+        st.caption("📋 Sin tareas ejecutadas aún. Captura una para comenzar.")
     else:
         cols_per_row = 3
         for i in range(0, len(recent_tasks), cols_per_row):
@@ -2932,28 +2932,28 @@ def home_view():
             for j, task in enumerate(recent_tasks[i:i+cols_per_row]):
                 with cols[j]:
                     time_ago = format_time_ago(task.get("updated_at", ""))
-                    st.markdown(f"**ðŸ“Œ {task['title'][:40]}**")
-                    st.caption(f"{task['project_name']} Â· {time_ago}")
+                    st.markdown(f"**📌 {task['title'][:40]}**")
+                    st.caption(f"{task['project_name']} · {time_ago}")
                     if st.button("Continuar", key=f"home_continue_{task['id']}", use_container_width=True):
                         open_task_workspace(task["project_id"], task["id"])
                         st.rerun()
 
     st.divider()
 
-    # ==================== OPCIÃ“N 2: CREAR ALGO NUEVO ====================
+    # ==================== OPCIÓN 2: CREAR ALGO NUEVO ====================
     st.markdown("#### Mis proyectos")
 
     projects_with_activity = get_projects_with_activity()
 
     if not projects_with_activity:
-        st.caption("ðŸ“ Sin proyectos. Crea uno para comenzar.")
+        st.caption("📁 Sin proyectos. Crea uno para comenzar.")
     else:
         cols_per_row = 2
         for i in range(0, len(projects_with_activity), cols_per_row):
             cols = st.columns(cols_per_row)
             for j, project in enumerate(projects_with_activity[i:i+cols_per_row]):
                 with cols[j]:
-                    st.markdown(f"**ðŸ“ {project['name'][:30]}**")
+                    st.markdown(f"**📁 {project['name'][:30]}**")
                     st.caption(f"{project['active_task_count']} tareas")
                     if st.button("Abrir", key=f"home_open_project_{project['id']}", use_container_width=True):
                         st.session_state["active_project_id"] = project["id"]
@@ -2968,12 +2968,12 @@ def home_view():
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("âž• Nueva tarea", use_container_width=True, key="home_new_task_btn", type="primary"):
+        if st.button("➕ Nueva tarea", use_container_width=True, key="home_new_task_btn", type="primary"):
             st.session_state["view"] = "new_task"
             st.rerun()
 
     with col2:
-        if st.button("âž• Crear proyecto", use_container_width=True, key="home_create_new"):
+        if st.button("➕ Crear proyecto", use_container_width=True, key="home_create_new"):
             st.session_state["show_create_project"] = True
             st.rerun()
 
@@ -2986,9 +2986,9 @@ def home_view():
 
         with st.form("create_project_form"):
             name = st.text_input("Nombre", placeholder="Mi proyecto")
-            description = st.text_area("DescripciÃ³n", height=60, placeholder="Breve resumen...")
-            objective = st.text_area("Objetivo", height=60, placeholder="Â¿QuÃ© quiero lograr?")
-            base_context = st.text_area("Contexto", height=80, placeholder="Referencias Ãºtiles...")
+            description = st.text_area("Descripción", height=60, placeholder="Breve resumen...")
+            objective = st.text_area("Objetivo", height=60, placeholder="¿Qué quiero lograr?")
+            base_context = st.text_area("Contexto", height=80, placeholder="Referencias útiles...")
             base_instructions = st.text_area("Reglas", height=80, placeholder="Criterios estables...")
             tags = st.text_input("Etiquetas", placeholder="producto, ia, trabajo")
             files = st.file_uploader("Documentos", accept_multiple_files=True)
@@ -3055,18 +3055,18 @@ def project_view():
 
     # ==================== SIDEBAR ====================
     with sidebar:
-        # Proyecto como hint (automÃ¡tico, no decisiÃ³n)
+        # Proyecto como hint (automático, no decisión)
         st.caption(f"Trabajando en: **{project['name']}**")
 
         st.write("")  # Espaciado
 
         # MARKDOWN: Titular claro
-        st.markdown("## Â¿QuÃ© necesitas hacer ahora?")
+        st.markdown("## ¿Qué necesitas hacer ahora?")
 
         # INPUT PROTAGONISTA (text_area, 110px)
         title = st.text_area(
             "",
-            placeholder="Ej: resume este documento â€¢ escribe un email â€¢ analiza un excel â€¢ propÃ³n un plan estratÃ©gico",
+            placeholder="Ej: resume este documento • escribe un email • analiza un excel • propón un plan estratégico",
             key=f"title_{pid}",
             height=110,
             label_visibility="collapsed"
@@ -3096,18 +3096,18 @@ def project_view():
 
         # CONTEXTO PROGRESIVO: Opcional, cerrado por defecto
         context = ""
-        with st.expander("AÃ±adir contexto (opcional)", expanded=False):
+        with st.expander("Añadir contexto (opcional)", expanded=False):
             context = st.text_area(
                 "",
                 height=60,
-                placeholder="InformaciÃ³n relevante para ejecutar la tarea...",
+                placeholder="Información relevante para ejecutar la tarea...",
                 key=f"ctx_task_{pid}",
                 label_visibility="collapsed"
             )
 
         st.write("")  # Espaciado
 
-        # BOTÃ“N ÃšNICO
+        # BOTÓN ÚNICO
         if st.button("Generar propuesta", use_container_width=True, key=f"create_task_{pid}", disabled=not title.strip()):
             if title.strip():
                 tid = create_task(pid, title, "", TIPOS_TAREA[0], context or "", None)
@@ -3116,10 +3116,10 @@ def project_view():
 
         st.write("")  # Espaciado
 
-        # LISTA DE TAREAS â€” Separadas en Ejecutadas vs Pendientes (H: Persistencia Visible)
+        # LISTA DE TAREAS — Separadas en Ejecutadas vs Pendientes (H: Persistencia Visible)
         st.markdown(f"### Tareas ({len(tasks)})")
 
-        search = st.text_input("Buscar", placeholder="TÃ­tulo o descripciÃ³n...", key=f"search_{pid}", label_visibility="collapsed")
+        search = st.text_input("Buscar", placeholder="Título o descripción...", key=f"search_{pid}", label_visibility="collapsed")
         filtered = get_project_tasks(pid, search=search)
 
         if not filtered:
@@ -3162,7 +3162,7 @@ def project_view():
 
         task = get_task(tid)
         if not task or task["project_id"] != pid:
-            st.info("Selecciona una tarea vÃ¡lida del proyecto.")
+            st.info("Selecciona una tarea válida del proyecto.")
             return
 
         current_state = task_execution_state(task)
@@ -3173,7 +3173,7 @@ def project_view():
         latest_run = get_latest_execution_run(tid)
         visible_output = task["llm_output"] or (latest_run["output_text"] if latest_run else "")
 
-        # PREPARAR VARIABLES PARA ROUTER (usado al final, no aquÃ­)
+        # PREPARAR VARIABLES PARA ROUTER (usado al final, no aquí)
         trace = normalize_trace(
             st.session_state.get(trace_key)
             or trace_from_history_run(latest_run)
@@ -3200,16 +3200,16 @@ def project_view():
                         st.caption("JSON")
                         st.code(latest_run["artifact_json_path"], language="text")
 
-        # BotÃ³n ejecutar - primario
+        # Botón ejecutar - primario
         col_exec, col_other = st.columns([2, 3])
         with col_exec:
             execute_btn = st.button("Ejecutar", use_container_width=True, key=f"execute_router_{tid}")
 
         if execute_btn:
-            # Detectar si es primera ejecuciÃ³n
+            # Detectar si es primera ejecución
             is_first_execution = current_state not in {"executed", "preview"}
 
-            # Mostrar progreso visual (no spinner genÃ©rico)
+            # Mostrar progreso visual (no spinner genérico)
             progress_placeholder = st.empty()
             status_messages = [
                 "Analizando tu tarea...",
@@ -3218,7 +3218,7 @@ def project_view():
             ]
 
             for idx, msg in enumerate(status_messages):
-                progress_placeholder.info(f"â³ {msg}")
+                progress_placeholder.info(f"⏳ {msg}")
                 import time
                 time.sleep(0.3)  # Timing visual para que se vea el progreso
 
@@ -3227,24 +3227,24 @@ def project_view():
             # Limpiar mensaje de progreso
             progress_placeholder.empty()
 
-            # Construir router_summary con info completa (Ã©xito o error)
+            # Construir router_summary con info completa (éxito o error)
             if result.status == "error":
                 # Detectar si es fallback (provider no disponible)
                 is_fallback = result.error.code == "provider_not_available"
 
                 if is_fallback:
                     # ==================== MODO DEMO: Propuesta Previa ====================
-                    # Generar propuesta previa Ãºtil basada en anÃ¡lisis del Router
+                    # Generar propuesta previa útil basada en análisis del Router
                     demo_proposal = generate_demo_proposal(result.routing, task_input)
                     display_demo_mode_panel(demo_proposal)
 
                     # Guardar propuesta previa
                     output = f"""[PROPUESTA PREVIA - Modo Demo]
 
-ðŸ§  QuÃ© he entendido:
+🧠 Qué he entendido:
 {demo_proposal['understood']}
 
-ðŸŽ¯ CÃ³mo lo resolverÃ­a:
+🎯 Cómo lo resolvería:
 {demo_proposal['strategy']}
 
 Prioridad: {demo_proposal['priority']}
@@ -3254,8 +3254,8 @@ Contenido de ejecucion:
 {demo_proposal['execution_prompt']}
 
 ---
-Nota: Esta es una propuesta previa basada en el anÃ¡lisis del Router.
-Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
+Nota: Esta es una propuesta previa basada en el análisis del Router.
+Para obtener el resultado real, conecta un motor en Configuración.
 """
                     extract = demo_proposal["understood"]
 
@@ -3273,12 +3273,12 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
                     # ==================== ERROR REAL (no fallback) ====================
                     # Mostrar warning estructurado (amarillo, no rojo)
                     st.warning(f"""
-**âš ï¸ No se pudo completar la ejecuciÃ³n**
+**⚠️ No se pudo completar la ejecución**
 
 **Tipo de error:** {result.error.code}
 **Detalles:** {result.error.message}
 
-â†’ Revisa la configuraciÃ³n del proveedor o conecta un motor diferente.
+→ Revisa la configuración del proveedor o conecta un motor diferente.
                     """.strip())
 
                     router_summary = (
@@ -3294,12 +3294,12 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
                     execution_status = "failed"
 
             else:
-                # ==================== EJECUCIÃ“N EXITOSA ====================
+                # ==================== EJECUCIÓN EXITOSA ====================
                 output = result.output_text
                 extract = output[:700]
 
                 router_summary = (
-                    f"EjecuciÃ³n completada\n"
+                    f"Ejecución completada\n"
                     f"Modo: {result.routing.mode}\n"
                     f"Modelo: {result.metrics.model_used}\n"
                     f"Proveedor: {result.metrics.provider_used}\n"
@@ -3345,7 +3345,7 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
                 "latency_ms": result.metrics.latency_ms,
                 "estimated_cost": result.metrics.estimated_cost,
                 "status": execution_status,  # "executed", "preview", o "failed"
-                "execution_status": execution_status,  # ExplÃ­cito: quÃ© tipo de resultado
+                "execution_status": execution_status,  # Explícito: qué tipo de resultado
                 "error_code": result.error.code if result.error else None,
                 "error_message": result.error.message if result.error else None,
                 "execution_prompt": execution_prompt,
@@ -3359,8 +3359,8 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
         if current_state == "failed":
             st.warning(task["router_summary"] or "Ejecucion fallida. Revisa la configuracion del proveedor.")
         elif current_state in {"pending", "draft"}:
-            # Estado vacÃ­o: aguardando ejecuciÃ³n
-            st.info("ðŸ“ Resultado pendiente. Ejecuta el Router arriba para recibir la respuesta.")
+            # Estado vacío: aguardando ejecución
+            st.info("📝 Resultado pendiente. Ejecuta el Router arriba para recibir la respuesta.")
         else:
             # Con resultado: estructura simple y clara
             # [1] RESULTADO (PROTAGONISTA)
@@ -3368,19 +3368,19 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
                 "",
                 value=visible_output,
                 height=280,
-                placeholder="Resultado de la ejecuciÃ³n...",
+                placeholder="Resultado de la ejecución...",
                 key=f"output_{tid}",
                 label_visibility="collapsed"
             )
 
             st.write("")  # Espaciado
 
-            # [2] LÃNEA DE CONTINUIDAD (MICROCOPY)
-            st.caption("Puedes editar este resultado o mejorarlo con anÃ¡lisis mÃ¡s profundo.")
+            # [2] LÍNEA DE CONTINUIDAD (MICROCOPY)
+            st.caption("Puedes editar este resultado o mejorarlo con análisis más profundo.")
 
             st.write("")  # Espaciado
 
-            # [3] ACCIONES (4 botones mÃ¡ximo, orden exacto)
+            # [3] ACCIONES (4 botones máximo, orden exacto)
             col1, col2, col3, col4 = st.columns(4)
 
             # Definir claves de session_state para todos los flujos
@@ -3391,16 +3391,16 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
 
             # 1. PRIMARIO: Guardar como activo (abre mini-flujo)
             with col1:
-                if st.button("ðŸ“¦ Guardar como activo", use_container_width=True, key=f"save_asset_btn_{tid}"):
+                if st.button("📦 Guardar como activo", use_container_width=True, key=f"save_asset_btn_{tid}"):
                     if not output.strip():
                         st.error("No hay contenido para guardar.")
                     else:
                         st.session_state[save_panel_key] = True
                         st.rerun()
 
-            # 2. SECUNDARIO: Mejorar resultado (con anÃ¡lisis mÃ¡s profundo)
+            # 2. SECUNDARIO: Mejorar resultado (con análisis más profundo)
             with col2:
-                if st.button("âœ¨ Mejorar con anÃ¡lisis mÃ¡s profundo", use_container_width=True, key=f"improve_{tid}"):
+                if st.button("✨ Mejorar con análisis más profundo", use_container_width=True, key=f"improve_{tid}"):
                     st.session_state[improve_in_progress_key] = True
                     st.rerun()
 
@@ -3412,12 +3412,12 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
                 progress_placeholder = st.empty()
                 status_messages = [
                     "Analizando resultado actual...",
-                    "Ejecutando con anÃ¡lisis mÃ¡s profundo...",
+                    "Ejecutando con análisis más profundo...",
                     "Procesando mejoras..."
                 ]
 
                 for idx, msg in enumerate(status_messages):
-                    progress_placeholder.info(f"â³ {msg}")
+                    progress_placeholder.info(f"⏳ {msg}")
                     import time
                     time.sleep(0.3)
 
@@ -3461,11 +3461,11 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
 
             # 3. SECUNDARIO: Personalizar resultado
             with col3:
-                st.button("âœï¸ Personalizar", use_container_width=True, key=f"edit_result_{tid}", disabled=True, help="El resultado ya es editable arriba. Modifica el texto directamente.")
+                st.button("✏️ Personalizar", use_container_width=True, key=f"edit_result_{tid}", disabled=True, help="El resultado ya es editable arriba. Modifica el texto directamente.")
 
             # 4. TERCIARIO: Re-ejecutar
             with col4:
-                if st.button("ðŸ”„ Re-ejecutar", use_container_width=True, key=f"reexec_{tid}"):
+                if st.button("🔄 Re-ejecutar", use_container_width=True, key=f"reexec_{tid}"):
                     st.session_state[trace_key] = None
                     st.rerun()
 
@@ -3478,16 +3478,16 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
                     st.markdown("---")
                     st.markdown("**Guardar como activo reutilizable**")
 
-                    # Generar nombre automÃ¡tico: primeras 5-8 palabras del resultado
+                    # Generar nombre automático: primeras 5-8 palabras del resultado
                     words = output.split()[:8]
-                    auto_name = " ".join(words) if words else "Activo sin tÃ­tulo"
+                    auto_name = " ".join(words) if words else "Activo sin título"
 
                     # Campo 1: Nombre del activo
                     asset_name = st.text_input(
                         "Nombre del activo",
                         value=auto_name,
                         key=f"asset_name_{tid}",
-                        placeholder="TÃ­tulo identificable...",
+                        placeholder="Título identificable...",
                         help="Las primeras palabras del resultado"
                     )
 
@@ -3504,16 +3504,16 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
                         project_options,
                         index=selected_project_idx,
                         key=f"asset_project_{tid}",
-                        help="DÃ³nde se guardarÃ¡ este activo"
+                        help="Dónde se guardará este activo"
                     )
 
-                    # Campo 3: DescripciÃ³n (opcional)
+                    # Campo 3: Descripción (opcional)
                     asset_description = st.text_area(
-                        "DescripciÃ³n (opcional)",
+                        "Descripción (opcional)",
                         value="",
                         height=60,
                         key=f"asset_desc_{tid}",
-                        placeholder="Notas sobre cuÃ¡ndo reutilizar esto...",
+                        placeholder="Notas sobre cuándo reutilizar esto...",
                         help="Ayuda futura a entender este activo"
                     )
 
@@ -3521,7 +3521,7 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
                     btn_col1, btn_col2 = st.columns([0.5, 0.5])
 
                     with btn_col1:
-                        if st.button("âœ“ Guardar activo", use_container_width=True, key=f"confirm_save_{tid}"):
+                        if st.button("✓ Guardar activo", use_container_width=True, key=f"confirm_save_{tid}"):
                             # Guardar el activo
                             selected_proj_id = next((p["id"] for p in projects if p["name"] == asset_project), pid)
                             create_asset(
@@ -3534,24 +3534,24 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
 
                             # Limpiar estado
                             st.session_state[save_panel_key] = False
-                            st.success(f"âœ¨ **{asset_name}** guardado en **{asset_project}** como activo reutilizable")
-                            st.balloons()  # CelebraciÃ³n visual
+                            st.success(f"✨ **{asset_name}** guardado en **{asset_project}** como activo reutilizable")
+                            st.balloons()  # Celebración visual
                             st.rerun()
 
                     with btn_col2:
-                        if st.button("âœ• Cancelar", use_container_width=True, key=f"cancel_save_{tid}"):
+                        if st.button("✕ Cancelar", use_container_width=True, key=f"cancel_save_{tid}"):
                             st.session_state[save_panel_key] = False
                             st.rerun()
 
-            # BLOQUE DE RESULTADO MEJORADO (despuÃ©s del original)
+            # BLOQUE DE RESULTADO MEJORADO (después del original)
             if st.session_state.get(improved_result_key):
                 st.write("")  # Espaciado
                 st.markdown("---")
                 st.write("")
 
-                # IMPACTO VISUAL: Mostrar que accediÃ³ a poder extra
-                st.markdown("### ðŸš€ Resultado con AnÃ¡lisis Profundo")
-                st.caption("El sistema revisÃ³ tu trabajo con el modelo mÃ¡s potente. AquÃ­ estÃ¡ lo que descubriÃ³:")
+                # IMPACTO VISUAL: Mostrar que accedió a poder extra
+                st.markdown("### 🚀 Resultado con Análisis Profundo")
+                st.caption("El sistema revisó tu trabajo con el modelo más potente. Aquí está lo que descubrió:")
 
                 improved_output = st.session_state.get(improved_result_key, "")
 
@@ -3567,22 +3567,22 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
 
                 st.write("")  # Espaciado
 
-                # InformaciÃ³n de la mejora
+                # Información de la mejora
                 improved_trace = st.session_state.get(improved_trace_key, {})
                 if improved_trace:
                     st.caption(
-                        f"âœ¨ AnÃ¡lisis profundo | {improved_trace['model_used']} | "
+                        f"✨ Análisis profundo | {improved_trace['model_used']} | "
                         f"~{improved_trace['latency_ms']}ms | "
                         f"${improved_trace['estimated_cost']:.4f}"
                     )
 
                 st.write("")  # Espaciado
 
-                # Botones de acciÃ³n para resultado mejorado
+                # Botones de acción para resultado mejorado
                 imp_col1, imp_col2, imp_col3 = st.columns([0.5, 0.25, 0.25])
 
                 with imp_col1:
-                    if st.button("âœ“ Usar este resultado", use_container_width=True, key=f"use_improved_{tid}"):
+                    if st.button("✓ Usar este resultado", use_container_width=True, key=f"use_improved_{tid}"):
                         # Reemplazar el resultado original con el mejorado
                         improved_metrics = {
                             "mode": improved_trace.get("mode", ""),
@@ -3600,7 +3600,7 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
                             task_id=task["id"],
                             model_used=improved_trace.get("model_used", ""),
                             router_summary=(
-                                f"Resultado mejorado con anÃ¡lisis profundo\n"
+                                f"Resultado mejorado con análisis profundo\n"
                                 f"Modelo: {improved_trace.get('model_used', '')}\n"
                                 f"Modo: {improved_trace.get('mode', '')}\n"
                                 f"Proveedor: {improved_trace.get('provider_used', '')}\n"
@@ -3633,15 +3633,15 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
                         st.session_state[improved_result_key] = None
                         st.session_state[improved_trace_key] = None
 
-                        st.success("âœ¨ **Excelente.** Tu resultado ahora es la versiÃ³n con anÃ¡lisis profundo")
+                        st.success("✨ **Excelente.** Tu resultado ahora es la versión con análisis profundo")
                         st.rerun()
 
                 with imp_col2:
-                    if st.button("â†”ï¸ Comparar", use_container_width=True, key=f"compare_improved_{tid}"):
-                        st.info("ComparaciÃ³n: arriba original, abajo mejorado. DesplÃ¡zate para ver ambos.")
+                    if st.button("↔️ Comparar", use_container_width=True, key=f"compare_improved_{tid}"):
+                        st.info("Comparación: arriba original, abajo mejorado. Desplázate para ver ambos.")
 
                 with imp_col3:
-                    if st.button("âœ• Descartar", use_container_width=True, key=f"discard_improved_{tid}"):
+                    if st.button("✕ Descartar", use_container_width=True, key=f"discard_improved_{tid}"):
                         # Limpiar estado de mejora
                         st.session_state[improve_in_progress_key] = False
                         st.session_state[improved_result_key] = None
@@ -3654,15 +3654,15 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
         if trace:
             st.write("")  # Espaciado
 
-            mode_label = "ðŸŸ¢ Modo ECO" if trace["mode"] == "eco" else "ðŸ”µ AnÃ¡lisis Profundo"
-            mode_desc = "Respuesta rÃ¡pida y precisa" if trace["mode"] == "eco" else "AnÃ¡lisis detallado y completo"
+            mode_label = "🟢 Modo ECO" if trace["mode"] == "eco" else "🔵 Análisis Profundo"
+            mode_desc = "Respuesta rápida y precisa" if trace["mode"] == "eco" else "Análisis detallado y completo"
 
-            # DECISIÃ“N (contexto explicativo, no protagonista)
-            st.markdown(f"**{mode_label}** â€” _{mode_desc}_")
+            # DECISIÓN (contexto explicativo, no protagonista)
+            st.markdown(f"**{mode_label}** — _{mode_desc}_")
 
-            # RAZONAMIENTO (por quÃ© eligiÃ³ este modo)
+            # RAZONAMIENTO (por qué eligió este modo)
             if trace.get("reasoning_path"):
-                st.caption(f"**Por quÃ©:** {trace['reasoning_path']}")
+                st.caption(f"**Por qué:** {trace['reasoning_path']}")
 
             # METADATA (discreta, en columnas)
             col_meta1, col_meta2, col_meta3 = st.columns(3)
@@ -3677,7 +3677,7 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
 
         # EXPANDIBLES - BAJO DEMANDA
         # 1. Ficha del proyecto
-        with st.expander("ðŸ“‹ Ficha del proyecto", expanded=False):
+        with st.expander("📋 Ficha del proyecto", expanded=False):
             st.markdown("**Objetivo**")
             st.caption(project["objective"] or "Sin objetivo definido")
             st.markdown("**Contexto de referencia**")
@@ -3691,14 +3691,14 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
 
         # 3. Trazabilidad
         if trace:
-            with st.expander("ðŸ” Trazabilidad & Detalles tÃ©cnicos", expanded=False):
+            with st.expander("🔍 Trazabilidad & Detalles técnicos", expanded=False):
                 st.write(f"**Estado:** {trace['status'].upper()}")
                 st.write(f"**Modo:** {trace['mode']}")
                 st.write(f"**Modelo:** {trace['model_used']}")
                 st.write(f"**Proveedor:** {trace['provider_used']}")
                 st.write(f"**Latencia:** {trace['latency_ms']} ms")
                 st.write(f"**Coste estimado:** ${trace['estimated_cost']:.3f}")
-                st.write("**Motivo de la decisiÃ³n:**")
+                st.write("**Motivo de la decisión:**")
                 st.write(trace["reasoning_path"])
                 if trace.get("error_code"):
                     st.warning(f"**Error:** {trace['error_code']}")
@@ -3706,20 +3706,20 @@ Para obtener el resultado real, conecta un motor en ConfiguraciÃ³n.
 
         # 4. Activos relacionados
         if assets:
-            with st.expander(f"ðŸŽ¯ Activos relacionados ({len(assets)})", expanded=False):
+            with st.expander(f"🎯 Activos relacionados ({len(assets)})", expanded=False):
                 for a in assets[:10]:
                     st.markdown(f"**{a['title']}**")
                     st.caption(a["summary"] or "Sin resumen")
                     st.divider()
         else:
-            with st.expander("ðŸŽ¯ Activos relacionados (0)", expanded=False):
-                st.info("TodavÃ­a no hay activos en este proyecto.")
+            with st.expander("🎯 Activos relacionados (0)", expanded=False):
+                st.info("Todavía no hay activos en este proyecto.")
 
 
 # ==================== BLOQUE E1b: RADAR VIEW ====================
 def radar_view():
     """
-    Renderiza catÃ¡logo vivo como pÃ¡gina Streamlit (E1b: Vista).
+    Renderiza catálogo vivo como página Streamlit (E1b: Vista).
 
     Consume snapshot de build_radar_snapshot() y presenta:
     - Narrativa clara: "Live catalog snapshot"
@@ -3727,21 +3727,21 @@ def radar_view():
     - Detalle por provider
     - Metadata honesta
 
-    NO es observatorio histÃ³rico, NO promete features que no tiene.
+    NO es observatorio histórico, NO promete features que no tiene.
     """
     # ==================== Header + Narrativa ====================
-    st.header("ðŸ“¡ Radar")
+    st.header("📡 Radar")
     st.markdown("""
     **Live Catalog Snapshot**
 
-    QuÃ© ves aquÃ­ es el estado actual del catÃ¡logo de PWR.
+    Qué ves aquí es el estado actual del catálogo de PWR.
     """)
 
     # Control toggle para debug
     col1, col2 = st.columns([0.8, 0.2])
     with col2:
         show_internal = st.checkbox(
-            "ðŸ”§ Debug",
+            "🔧 Debug",
             value=False,
             help="Mostrar modelos internos (mock/test)"
         )
@@ -3750,14 +3750,14 @@ def radar_view():
     radar = build_radar_snapshot(internal=show_internal)
 
     if radar["status"] != "ok":
-        st.error(f"âš ï¸ Error: {radar.get('error', 'Unknown')}")
+        st.error(f"⚠️ Error: {radar.get('error', 'Unknown')}")
         return
 
     radar_data = radar["radar"]
     metadata = radar["metadata"]
 
     # ==================== Resumen (Arriba) ====================
-    st.subheader("ðŸ“Š Estado del CatÃ¡logo")
+    st.subheader("📊 Estado del Catálogo")
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -3773,7 +3773,7 @@ def radar_view():
     st.divider()
 
     # ==================== Providers: Listado Detallado ====================
-    st.subheader("ðŸ”Œ Providers")
+    st.subheader("🔌 Providers")
 
     for provider_name in sorted(radar_data["providers"].keys()):
         provider = radar_data["providers"][provider_name]
@@ -3786,25 +3786,25 @@ def radar_view():
 
             with col1:
                 # Status badge + nombre
-                status_emoji = "ðŸŸ¢" if model["status"] == "active" else "ðŸŸ¡"
+                status_emoji = "🟢" if model["status"] == "active" else "🟡"
                 internal_badge = " [INTERNAL]" if model["is_internal"] else ""
                 st.write(f"{status_emoji} **{model['name']}{internal_badge}**")
 
             with col2:
                 # Mode + cost
-                st.caption(f"ðŸ“Œ {model['mode']} | ðŸ’° ${model['estimated_cost_per_run']:.3f}")
+                st.caption(f"📌 {model['mode']} | 💰 ${model['estimated_cost_per_run']:.3f}")
 
             with col3:
                 # Capabilities badges
                 caps = model.get("capabilities", {})
                 badges = []
                 if caps.get("vision"):
-                    badges.append("ðŸ‘ï¸")
+                    badges.append("👁️")
                 if caps.get("reasoning"):
-                    badges.append("ðŸ§ ")
+                    badges.append("🧠")
                 if caps.get("code_execution"):
-                    badges.append("ðŸ’»")
-                st.caption(" ".join(badges) if badges else "â€”")
+                    badges.append("💻")
+                st.caption(" ".join(badges) if badges else "—")
 
             # Expandable full details
             with st.expander(f"Detalles de {model['name']}", expanded=False):
@@ -3822,8 +3822,8 @@ def radar_view():
 
         st.divider()
 
-    # ==================== Modes: DescripciÃ³n ====================
-    st.subheader("âš™ï¸ Modos")
+    # ==================== Modes: Descripción ====================
+    st.subheader("⚙️ Modos")
 
     for mode_name in radar_data["summary"]["modes_list"]:
         mode = radar_data["modes"][mode_name]
@@ -3835,30 +3835,30 @@ def radar_view():
     st.divider()
 
     # ==================== Metadata Footer ====================
-    st.subheader("â„¹ï¸ Acerca de este Radar")
+    st.subheader("ℹ️ Acerca de este Radar")
 
     col1, col2 = st.columns([0.7, 0.3])
 
     with col1:
-        st.caption(f"ðŸ“… Generado: {metadata['generated_at']}")
-        st.caption(f"ðŸ“¦ VersiÃ³n: {metadata['radar_version']} Â· Fuente: {metadata['catalog_source']}")
+        st.caption(f"📅 Generado: {metadata['generated_at']}")
+        st.caption(f"📦 Versión: {metadata['radar_version']} · Fuente: {metadata['catalog_source']}")
 
     with col2:
         if show_internal:
-            st.warning("âš ï¸ Modelos internos mostrados")
+            st.warning("⚠️ Modelos internos mostrados")
 
-    # ClarificaciÃ³n sobre lo que ES y lo que NO ES
+    # Clarificación sobre lo que ES y lo que NO ES
     st.markdown(f"""
-    **QuÃ© es Radar v1:**
-    - âœ… Snapshot del catÃ¡logo vivo (quÃ© tenemos hoy)
-    - âœ… ConfiguraciÃ³n de providers y modelos
-    - âœ… Capacidades disponibles
+    **Qué es Radar v1:**
+    - ✅ Snapshot del catálogo vivo (qué tenemos hoy)
+    - ✅ Configuración de providers y modelos
+    - ✅ Capacidades disponibles
 
-    **QuÃ© NO es Radar v1 (aÃºn):**
-    - âŒ Observatorio histÃ³rico
-    - âŒ Benchmarking
-    - âŒ Health monitor
-    - âŒ Scoring adaptativo
+    **Qué NO es Radar v1 (aún):**
+    - ❌ Observatorio histórico
+    - ❌ Benchmarking
+    - ❌ Health monitor
+    - ❌ Scoring adaptativo
 
     *{metadata['note']}*
     """)
@@ -3908,9 +3908,9 @@ def main():
     if os.environ.get("PORT"):  # Railway sets PORT env var
         print(f"[MAIN] PORT={os.environ.get('PORT')}", file=sys.stderr, flush=True)
         st.warning(
-            "âš ï¸ **Entorno de prueba en Railway.** La persistencia local con SQLite puede ser efÃ­mera. "
-            "VÃ¡lido para test corto de UX, no para uso productivo.",
-            icon="ðŸ”§"
+            "⚠️ **Entorno de prueba en Railway.** La persistencia local con SQLite puede ser efímera. "
+            "Válido para test corto de UX, no para uso productivo.",
+            icon="🔧"
         )
 
     # ===== Initialize Database (with defensive error handling) =====
@@ -3920,7 +3920,7 @@ def main():
         print("[MAIN] init_db() OK", file=sys.stderr, flush=True)
     except Exception as e:
         print(f"[MAIN] init_db() FAILED: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-        st.error(f"âŒ Startup error: Database initialization failed: {str(e)}")
+        st.error(f"❌ Startup error: Database initialization failed: {str(e)}")
         st.stop()
 
     print("[MAIN] About to call inject_css()...", file=sys.stderr, flush=True)
@@ -3929,19 +3929,19 @@ def main():
 
     print("[MAIN] About to build sidebar...", file=sys.stderr, flush=True)
     with st.sidebar:
-        # ==================== TÃTULO REDUCIDO ====================
+        # ==================== TÍTULO REDUCIDO ====================
         st.markdown("### PWR")
 
-        # ==================== NAVEGACIÃ“N PRINCIPAL VERTICAL (minimalista) ====================
+        # ==================== NAVEGACIÓN PRINCIPAL VERTICAL (minimalista) ====================
         current_view = st.session_state.get("view", "home")
 
-        if st.button("ðŸ  Home", use_container_width=True, key="nav_home",
+        if st.button("🏠 Home", use_container_width=True, key="nav_home",
                      type="primary" if current_view == "home" else "secondary"):
             st.session_state["view"] = "home"
             st.session_state["active_project_id"] = None
             st.rerun()
 
-        if st.button("ðŸ“¡ Radar", use_container_width=True, key="nav_radar",
+        if st.button("📡 Radar", use_container_width=True, key="nav_radar",
                      type="primary" if current_view == "radar" else "secondary"):
             st.session_state["view"] = "radar"
             st.rerun()
@@ -3956,7 +3956,7 @@ def main():
             with get_conn() as conn:
                 project = conn.execute("SELECT name FROM projects WHERE id = ?", (active_project_id,)).fetchone()
                 if project:
-                    st.caption("ðŸ“ Proyecto activo")
+                    st.caption("📁 Proyecto activo")
                     st.markdown(f"**{project['name'][:25]}**")
                     st.divider()
 
@@ -3964,7 +3964,7 @@ def main():
             with get_conn() as conn:
                 task = conn.execute("SELECT title FROM tasks WHERE id = ?", (active_task_id,)).fetchone()
                 if task:
-                    st.caption("ðŸ“Œ Tarea actual")
+                    st.caption("📌 Tarea actual")
                     st.markdown(f"**{task['title'][:25]}**")
                     st.divider()
 
