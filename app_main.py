@@ -2782,7 +2782,13 @@ def new_task_view():
         execution_service = ExecutionService(conn)
 
     projects = get_projects()
-    default_project = projects[0] if projects else None
+    active_project_id = st.session_state.get("active_project_id")
+    default_project = None
+
+    if active_project_id:
+        default_project = next((project for project in projects if project["id"] == active_project_id), None)
+    if not default_project and projects:
+        default_project = projects[0]
 
     # Header: Título + Volver (discreto)
     col1, col2 = st.columns([0.85, 0.15])
@@ -2957,6 +2963,7 @@ def home_view():
                     st.caption(f"{project['active_task_count']} tareas")
                     if st.button("Abrir", key=f"home_open_project_{project['id']}", use_container_width=True):
                         st.session_state["active_project_id"] = project["id"]
+                        st.session_state["selected_task_id"] = None
                         st.session_state["view"] = "project_view"
                         st.rerun()
 
@@ -3046,6 +3053,8 @@ def project_view():
     with h2:
         if st.button("Cerrar", use_container_width=True):
             st.session_state["active_project_id"] = None
+            st.session_state["selected_task_id"] = None
+            st.session_state["view"] = "home"
             st.rerun()
 
     st.markdown("---")
