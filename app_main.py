@@ -164,6 +164,88 @@ def task_state_caption(state: str) -> str:
     }.get(state, "Pendiente de ejecucion")
 
 
+def compact_text(value: str, max_len: int = 220) -> str:
+    cleaned = " ".join(str(value or "").split())
+    if not cleaned:
+        return ""
+    if len(cleaned) <= max_len:
+        return cleaned
+    return cleaned[: max_len - 1].rstrip() + "…"
+
+
+def task_primary_action_label(state: str) -> str:
+    return {
+        "failed": "Reintentar",
+        "preview": "Continuar",
+        "pending": "Ejecutar ahora",
+        "draft": "Ejecutar ahora",
+        "executed": "Ejecutar de nuevo",
+    }.get(state, "Ejecutar")
+
+
+def task_primary_action_hint(state: str) -> str:
+    return {
+        "failed": "Revisa el ultimo error y vuelve a intentarlo.",
+        "preview": "Continua desde la propuesta previa ya guardada.",
+        "pending": "La tarea esta lista para su primera ejecucion.",
+        "draft": "Completa la tarea ejecutandola por primera vez.",
+        "executed": "Lanza una nueva ejecucion si necesitas actualizar el resultado.",
+    }.get(state, "Ejecuta la tarea con el contexto actual.")
+
+
+def build_reentry_context(task, state: str, latest_run, trace: Optional[dict], visible_output: str) -> dict:
+    reference_iso = row_value(latest_run, "executed_at") or row_value(task, "updated_at")
+    reference_label = format_time_ago(reference_iso) if reference_iso else ""
+    provider = row_value(latest_run, "provider")
+    model = row_value(latest_run, "model")
+    motor_line = ""
+    if provider or model:
+        motor_line = f"Ultimo motor: {provider or 'provider?'} / {model or 'modelo?'}"
+
+    if state == "failed":
+        snippet_label = "Ultimo error visible"
+        snippet_text = compact_text(
+            row_value(latest_run, "error_message")
+            or row_value(trace or {}, "error_message")
+            or row_value(task, "router_summary")
+            or "El ultimo intento no se completo."
+        )
+        last_step = "El ultimo intento fallo y quedo guardado para revisarlo."
+    elif state == "preview":
+        snippet_label = "Ultima propuesta visible"
+        snippet_text = compact_text(
+            visible_output
+            or row_value(latest_run, "output_text")
+            or row_value(task, "router_summary")
+            or "Hay una propuesta previa guardada esperando continuacion."
+        )
+        last_step = "PWR dejo una propuesta previa guardada a la espera de que la continues."
+    elif state in {"pending", "draft"}:
+        snippet_label = "Pendiente actual"
+        snippet_text = compact_text(
+            row_value(task, "context")
+            or row_value(task, "router_summary")
+            or "La tarea sigue pendiente de ejecucion."
+        )
+        last_step = "La tarea quedo creada y lista para su primera ejecucion."
+    else:
+        snippet_label = "Ultimo resultado visible"
+        snippet_text = compact_text(
+            visible_output
+            or row_value(latest_run, "output_text")
+            or row_value(task, "router_summary")
+        )
+        last_step = "Hay un resultado disponible."
+
+    return {
+        "reference_label": reference_label,
+        "motor_line": motor_line,
+        "last_step": last_step,
+        "snippet_label": snippet_label,
+        "snippet_text": snippet_text,
+    }
+
+
 def open_task_workspace(project_id: int, task_id: int) -> None:
     st.session_state["active_project_id"] = project_id
     st.session_state["selected_task_id"] = task_id
@@ -2040,8 +2122,8 @@ def home_task_icon(state: str) -> str:
 def home_task_action_label(state: str) -> str:
     return {
         "executed": "Abrir",
-        "preview": "Retomar",
-        "failed": "Revisar",
+        "preview": "Continuar",
+        "failed": "Revisar fallo",
         "pending": "Retomar",
         "draft": "Abrir",
     }.get(state, "Abrir")
@@ -3222,8 +3304,26 @@ def project_view():
             or safe_json_loads(task["router_metrics_json"], {})
         )
         is_first_execution = trace.get("is_first_execution", False) if trace else False
+        reentry_states = {"failed", "preview", "pending", "draft"}
+        if current_state in reentry_states:
+            reentry_context = build_reentry_context(task, current_state, latest_run, trace, visible_output)
+            st.markdown("#### Contexto para retomar")
+            header_parts = [f"Estado actual: {task_state_caption(current_state)}"]
+            if reentry_context["reference_label"]:
+                header_parts.append(f"Ultima referencia: {reentry_context['reference_label']}")
+            st.caption(" · ".join(header_parts))
+            if reentry_context["motor_line"]:
+                st.caption(reentry_context["motor_line"])
+            st.caption(f"Ultimo paso detectado: {reentry_context['last_step']}")
+            if reentry_context["snippet_text"]:
+                if current_state == "failed":
+                    st.warning(f"{reentry_context['snippet_label']}: {reentry_context['snippet_text']}")
+                else:
+                    st.info(f"{reentry_context['snippet_label']}: {reentry_context['snippet_text']}")
+
         display_execution_view(current_decision, task_input, execution_prompt, trace)
-        st.caption(f"Estado de tarea: {task_state_caption(current_state)}")
+        if current_state not in reentry_states:
+            st.caption(f"Estado de tarea: {task_state_caption(current_state)}")
         provider_block = execution_service.provider_errors.get(current_decision.provider)
         if provider_block:
             st.warning(f"Proveedor bloqueado: {provider_block}")
@@ -3245,7 +3345,14 @@ def project_view():
         # Botón ejecutar - primario
         col_exec, col_other = st.columns([2, 3])
         with col_exec:
-            execute_btn = st.button("Ejecutar", use_container_width=True, key=f"execute_router_{tid}")
+            execute_btn = st.button(
+                task_primary_action_label(current_state),
+                use_container_width=True,
+                key=f"execute_router_{tid}",
+                type="primary",
+            )
+        with col_other:
+            st.caption(f"Siguiente accion: {task_primary_action_hint(current_state)}")
 
         if execute_btn:
             # Detectar si es primera ejecución
