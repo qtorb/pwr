@@ -28,15 +28,22 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "pwr_data"
 UPLOADS_DIR = DATA_DIR / "uploads"
 PORTABLE_RUNS_DIR = DATA_DIR / "portable_runs"
+REUSABLE_ASSETS_DIR = DATA_DIR / "reusable_assets"
 DB_PATH = DATA_DIR / "pwr.db"
 
 TIPOS_TAREA = ["Pensar", "Escribir", "Programar", "Revisar", "Decidir"]
+ASSET_TYPE_LABELS = {
+    "output": "Resultado",
+    "preview": "Preview",
+    "briefing": "Briefing",
+}
 
 
 def ensure_dirs() -> None:
     DATA_DIR.mkdir(exist_ok=True)
     UPLOADS_DIR.mkdir(exist_ok=True)
     PORTABLE_RUNS_DIR.mkdir(exist_ok=True)
+    REUSABLE_ASSETS_DIR.mkdir(exist_ok=True)
 
 
 def get_conn() -> sqlite3.Connection:
@@ -286,6 +293,21 @@ def build_reentry_context(task, state: str, latest_run, trace: Optional[dict], v
 def open_task_workspace(project_id: int, task_id: int) -> None:
     st.session_state["active_project_id"] = project_id
     st.session_state["selected_task_id"] = task_id
+    st.session_state["selected_asset_id"] = None
+    st.session_state["view"] = "project_view"
+
+
+def open_project_workspace(project_id: int) -> None:
+    st.session_state["active_project_id"] = project_id
+    st.session_state["selected_task_id"] = None
+    st.session_state["selected_asset_id"] = None
+    st.session_state["view"] = "project_view"
+
+
+def open_asset_workspace(project_id: int, asset_id: int) -> None:
+    st.session_state["active_project_id"] = project_id
+    st.session_state["selected_task_id"] = None
+    st.session_state["selected_asset_id"] = asset_id
     st.session_state["view"] = "project_view"
 
 
@@ -481,13 +503,20 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS assets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 project_id INTEGER NOT NULL,
-                task_id INTEGER NOT NULL,
+                task_id INTEGER,
+                source_execution_id INTEGER,
+                asset_type TEXT DEFAULT 'output',
+                source_execution_status TEXT DEFAULT '',
                 title TEXT NOT NULL,
                 summary TEXT DEFAULT '',
                 content TEXT NOT NULL,
                 created_at TEXT NOT NULL,
+                updated_at TEXT DEFAULT '',
+                artifact_md_path TEXT DEFAULT '',
+                artifact_json_path TEXT DEFAULT '',
                 FOREIGN KEY(project_id) REFERENCES projects(id),
-                FOREIGN KEY(task_id) REFERENCES tasks(id)
+                FOREIGN KEY(task_id) REFERENCES tasks(id),
+                FOREIGN KEY(source_execution_id) REFERENCES executions_history(id)
             )
             """
         )
@@ -523,8 +552,15 @@ def init_db() -> None:
         ensure_column(conn, "tasks", "updated_at", "TEXT DEFAULT ''")
 
         ensure_column(conn, "assets", "project_id", "INTEGER")
+        ensure_column(conn, "assets", "task_id", "INTEGER")
+        ensure_column(conn, "assets", "source_execution_id", "INTEGER")
+        ensure_column(conn, "assets", "asset_type", "TEXT DEFAULT 'output'")
+        ensure_column(conn, "assets", "source_execution_status", "TEXT DEFAULT ''")
         ensure_column(conn, "assets", "summary", "TEXT DEFAULT ''")
         ensure_column(conn, "assets", "created_at", "TEXT DEFAULT ''")
+        ensure_column(conn, "assets", "updated_at", "TEXT DEFAULT ''")
+        ensure_column(conn, "assets", "artifact_md_path", "TEXT DEFAULT ''")
+        ensure_column(conn, "assets", "artifact_json_path", "TEXT DEFAULT ''")
 
         normalize_existing_task_states(conn)
 
@@ -1236,31 +1272,174 @@ def update_task_result(task_id: int, llm_output: str, useful_extract: str) -> No
         )
 
 
-def create_asset(project_id: int, task_id: int, title: str, summary: str, content: str) -> int:
+def asset_type_label(asset_type: str) -> str:
+    return ASSET_TYPE_LABELS.get(str(asset_type or "").strip().lower(), "Activo")
+
+
+def asset_preview_text(asset) -> str:
+    summary = compact_text(row_value(asset, "summary"), 140)
+    if summary:
+        return summary
+    return compact_text(row_value(asset, "content"), 140)
+
+
+def build_asset_reuse_context(asset) -> str:
+    parts = [f"[ACTIVO REUTILIZADO · {asset_type_label(row_value(asset, 'asset_type'))}]"]
+    if row_value(asset, "title"):
+        parts.append(f"Título: {row_value(asset, 'title')}")
+    if row_value(asset, "summary"):
+        parts.append(f"Resumen: {row_value(asset, 'summary')}")
+    if row_value(asset, "task_title"):
+        parts.append(f"Tarea origen: {row_value(asset, 'task_title')}")
+    parts.append("")
+    parts.append(row_value(asset, "content"))
+    return "\n".join(part for part in parts if part is not None).strip()
+
+
+def write_asset_files(asset_id: int, asset, project, task_title: str) -> tuple[str, str]:
+    target = REUSABLE_ASSETS_DIR / f"project_{int(row_value(asset, 'project_id', 0) or 0):04d}" / f"asset_{asset_id:04d}"
+    target.mkdir(parents=True, exist_ok=True)
+    md_path = target / f"asset_{asset_id:04d}.md"
+    json_path = target / f"asset_{asset_id:04d}.json"
+
+    payload = {
+        "asset_id": asset_id,
+        "project_id": row_value(asset, "project_id"),
+        "project_name": row_value(project, "name"),
+        "task_id": row_value(asset, "task_id"),
+        "task_title": task_title,
+        "source_execution_id": row_value(asset, "source_execution_id"),
+        "source_execution_status": row_value(asset, "source_execution_status"),
+        "asset_type": row_value(asset, "asset_type"),
+        "title": row_value(asset, "title"),
+        "summary": row_value(asset, "summary"),
+        "content": row_value(asset, "content"),
+        "created_at": row_value(asset, "created_at"),
+        "updated_at": row_value(asset, "updated_at"),
+    }
+
+    md = f"""# PWR Reusable Asset
+
+Project: {payload['project_name']}
+Asset: {payload['title']}
+Type: {payload['asset_type']}
+Created: {payload['created_at']}
+
+## Origin
+
+- Task: {payload['task_title'] or '(none)'}
+- Source run: {payload['source_execution_id'] or '(none)'}
+- Source state: {payload['source_execution_status'] or '(none)'}
+
+## Summary
+
+{payload['summary'] or '(none)'}
+
+## Content
+
+```text
+{payload['content']}
+```
+"""
+    md_path.write_text(md, encoding="utf-8")
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return repo_relative_path(md_path), repo_relative_path(json_path)
+
+
+def create_asset(
+    project_id: int,
+    task_id: int,
+    title: str,
+    summary: str,
+    content: str,
+    asset_type: str = "output",
+    source_execution_id: Optional[int] = None,
+    source_execution_status: str = "",
+) -> int:
     created = now_iso()
+    asset_type = str(asset_type or "output").strip().lower()
+    if asset_type not in ASSET_TYPE_LABELS:
+        asset_type = "output"
+
     with get_conn() as conn:
         cur = conn.execute(
             """
-            INSERT INTO assets (project_id, task_id, title, summary, content, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO assets (
+                project_id, task_id, source_execution_id, asset_type, source_execution_status,
+                title, summary, content, created_at, updated_at, artifact_md_path, artifact_json_path
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '')
             """,
-            (project_id, task_id, title.strip(), summary.strip(), content.strip(), created),
+            (
+                project_id,
+                task_id,
+                source_execution_id,
+                asset_type,
+                source_execution_status.strip(),
+                title.strip(),
+                summary.strip(),
+                content.strip(),
+                created,
+                created,
+            ),
         )
-        return int(cur.lastrowid)
+        asset_id = int(cur.lastrowid)
+        asset = conn.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
+        project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        task = conn.execute("SELECT title FROM tasks WHERE id = ?", (task_id,)).fetchone() if task_id else None
+        task_title = row_value(task, "title")
+        md_path, json_path = write_asset_files(asset_id, asset, project, task_title)
+        conn.execute(
+            """
+            UPDATE assets
+            SET artifact_md_path = ?, artifact_json_path = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (md_path, json_path, created, asset_id),
+        )
+        return asset_id
 
 
 def get_project_assets(project_id: int) -> List[sqlite3.Row]:
     with get_conn() as conn:
         return conn.execute(
             """
-            SELECT a.*, t.title AS task_title
+            SELECT
+                a.*,
+                t.title AS task_title,
+                eh.executed_at AS source_executed_at,
+                eh.provider AS source_provider,
+                eh.model AS source_model
             FROM assets a
-            JOIN tasks t ON a.task_id = t.id
+            LEFT JOIN tasks t ON a.task_id = t.id
+            LEFT JOIN executions_history eh ON a.source_execution_id = eh.id
             WHERE a.project_id = ?
-            ORDER BY a.created_at DESC, a.id DESC
+            ORDER BY COALESCE(a.updated_at, a.created_at) DESC, a.id DESC
             """,
             (project_id,),
         ).fetchall()
+
+
+def get_asset(asset_id: int) -> Optional[sqlite3.Row]:
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            SELECT
+                a.*,
+                p.name AS project_name,
+                t.title AS task_title,
+                eh.executed_at AS source_executed_at,
+                eh.provider AS source_provider,
+                eh.model AS source_model
+            FROM assets a
+            LEFT JOIN projects p ON a.project_id = p.id
+            LEFT JOIN tasks t ON a.task_id = t.id
+            LEFT JOIN executions_history eh ON a.source_execution_id = eh.id
+            WHERE a.id = ?
+            LIMIT 1
+            """,
+            (asset_id,),
+        ).fetchone()
 
 
 # ==================== BLOQUE E1: RADAR SNAPSHOT LAYER ====================
@@ -2235,6 +2414,71 @@ def get_projects_with_activity() -> List[Dict]:
     return result
 
 
+def reuse_asset_as_task_base(project_id: int, asset) -> None:
+    st.session_state[f"asset_reuse_payload_{project_id}"] = {
+        "title": row_value(asset, "title") or "Nueva tarea",
+        "context": build_asset_reuse_context(asset),
+        "notice": f"Activo cargado como base: {row_value(asset, 'title')}. Ajusta título o contexto y genera una nueva propuesta.",
+    }
+    st.session_state["selected_asset_id"] = None
+    st.session_state["selected_task_id"] = None
+    st.session_state["view"] = "project_view"
+
+
+def render_asset_detail(project_id: int, asset) -> None:
+    st.markdown("#### Activo reutilizable")
+    meta_parts = [
+        asset_type_label(row_value(asset, "asset_type")),
+        format_time_ago(row_value(asset, "updated_at") or row_value(asset, "created_at")),
+    ]
+    if row_value(asset, "task_title"):
+        meta_parts.append(f"Origen: {row_value(asset, 'task_title')}")
+    if row_value(asset, "source_execution_status"):
+        meta_parts.append(task_state_caption(row_value(asset, "source_execution_status")))
+    st.caption(" · ".join(part for part in meta_parts if part))
+
+    if row_value(asset, "source_provider") or row_value(asset, "source_model"):
+        st.caption(
+            f"Motor origen: {row_value(asset, 'source_provider') or 'provider?'} / "
+            f"{row_value(asset, 'source_model') or 'modelo?'}"
+        )
+
+    if row_value(asset, "summary"):
+        st.info(row_value(asset, "summary"))
+
+    action_col1, action_col2, action_col3 = st.columns([2.2, 1.4, 1.2])
+    with action_col1:
+        if st.button("Usar como base de nueva tarea", use_container_width=True, key=f"use_asset_primary_{row_value(asset, 'id')}"):
+            reuse_asset_as_task_base(project_id, asset)
+            st.rerun()
+    with action_col2:
+        task_id = int(row_value(asset, "task_id", 0) or 0)
+        if task_id and st.button("Abrir tarea origen", use_container_width=True, key=f"open_asset_task_{row_value(asset, 'id')}"):
+            open_task_workspace(project_id, task_id)
+            st.rerun()
+    with action_col3:
+        if st.button("Cerrar activo", use_container_width=True, key=f"close_asset_{row_value(asset, 'id')}"):
+            st.session_state["selected_asset_id"] = None
+            st.rerun()
+
+    st.text_area(
+        "Contenido del activo",
+        value=row_value(asset, "content"),
+        height=320,
+        key=f"asset_content_{row_value(asset, 'id')}",
+        disabled=True,
+    )
+
+    if row_value(asset, "artifact_md_path") or row_value(asset, "artifact_json_path"):
+        with st.expander("Rastro portable del activo", expanded=False):
+            if row_value(asset, "artifact_md_path"):
+                st.caption("Markdown")
+                st.code(row_value(asset, "artifact_md_path"), language="text")
+            if row_value(asset, "artifact_json_path"):
+                st.caption("JSON")
+                st.code(row_value(asset, "artifact_json_path"), language="text")
+
+
 def format_time_ago(iso_string: str) -> str:
     """Convert ISO timestamp to human-readable 'time ago' format"""
     if not iso_string:
@@ -2991,6 +3235,7 @@ def new_task_view():
         if st.button("← Volver", key="new_task_back", use_container_width=True):
             st.session_state["view"] = "home"
             st.session_state["home_capture_input"] = ""
+            st.session_state["selected_asset_id"] = None
             st.rerun()
 
     if default_project:
@@ -3148,8 +3393,7 @@ def home_view():
                     st.markdown(f"**📁 {project['name'][:30]}**")
                     st.caption(f"{project['active_task_count']} tareas")
                     if st.button("Abrir", key=f"home_open_project_{project['id']}", use_container_width=True):
-                        st.session_state["active_project_id"] = project["id"]
-                        st.session_state["view"] = "project_view"
+                        open_project_workspace(project["id"])
                         st.rerun()
 
     st.write("")
@@ -3162,6 +3406,7 @@ def home_view():
     with col1:
         if st.button("➕ Nueva tarea", use_container_width=True, key="home_new_task_btn", type="primary"):
             st.session_state["view"] = "new_task"
+            st.session_state["selected_asset_id"] = None
             st.rerun()
 
     with col2:
@@ -3192,9 +3437,7 @@ def home_view():
                     st.error("El nombre es obligatorio.")
                 else:
                     pid = create_project(name, description, objective, base_context, base_instructions, tags, files)
-                    st.session_state["active_project_id"] = pid
-                    st.session_state["selected_task_id"] = None
-                    st.session_state["view"] = "project_view"
+                    open_project_workspace(pid)
                     st.session_state["show_create_project"] = False
                     st.rerun()
 
@@ -3225,6 +3468,7 @@ def project_view():
     with get_conn() as conn:
         execution_service = ExecutionService(conn)
 
+    all_projects = get_projects()
     tags = ", ".join(safe_json_loads(project["tags_json"], []))
     docs = get_project_documents(pid)
     tasks = get_project_tasks(pid)
@@ -3238,6 +3482,9 @@ def project_view():
     with h2:
         if st.button("Cerrar", use_container_width=True):
             st.session_state["active_project_id"] = None
+            st.session_state["selected_task_id"] = None
+            st.session_state["selected_asset_id"] = None
+            st.session_state["view"] = "home"
             st.rerun()
 
     st.markdown("---")
@@ -3249,6 +3496,14 @@ def project_view():
     with sidebar:
         # Proyecto como hint (automático, no decisión)
         st.caption(f"Trabajando en: **{project['name']}**")
+        asset_reuse_payload = st.session_state.pop(f"asset_reuse_payload_{pid}", None)
+        if asset_reuse_payload:
+            st.session_state[f"title_{pid}"] = asset_reuse_payload.get("title", "")
+            st.session_state[f"ctx_task_{pid}"] = asset_reuse_payload.get("context", "")
+            st.session_state[f"asset_prefill_notice_{pid}"] = asset_reuse_payload.get("notice", "")
+        prefill_notice = st.session_state.pop(f"asset_prefill_notice_{pid}", "")
+        if prefill_notice:
+            st.success(prefill_notice)
 
         st.write("")  # Espaciado
 
@@ -3347,6 +3602,16 @@ def project_view():
 
     # ==================== MAIN ====================
     with main:
+        selected_asset_id = st.session_state.get("selected_asset_id")
+        selected_asset = get_asset(selected_asset_id) if selected_asset_id else None
+        if selected_asset_id and (not selected_asset or int(row_value(selected_asset, "project_id", 0) or 0) != pid):
+            st.session_state["selected_asset_id"] = None
+            selected_asset = None
+
+        if selected_asset:
+            render_asset_detail(pid, selected_asset)
+            return
+
         tid = st.session_state.get("selected_task_id")
         if not tid:
             st.info("Selecciona o crea una tarea para trabajar.")
@@ -3707,10 +3972,31 @@ Para obtener el resultado real, conecta un motor en Configuración.
                 with st.container():
                     st.markdown("---")
                     st.markdown("**Guardar como activo reutilizable**")
+                    type_options = ["preview", "briefing"] if current_state == "preview" else ["output", "briefing"]
+                    default_type = "preview" if current_state == "preview" else "output"
+                    asset_type_key = f"asset_type_{tid}"
+                    if st.session_state.get(asset_type_key) not in type_options:
+                        st.session_state[asset_type_key] = default_type
+                    asset_type = st.selectbox(
+                        "Tipo de activo",
+                        type_options,
+                        index=type_options.index(default_type),
+                        key=asset_type_key,
+                        format_func=asset_type_label,
+                    )
 
-                    # Generar nombre automático: primeras 5-8 palabras del resultado
-                    words = output.split()[:8]
-                    auto_name = " ".join(words) if words else "Activo sin título"
+                    source_content = execution_prompt if asset_type == "briefing" else output.strip()
+                    auto_name_source = execution_prompt if asset_type == "briefing" else output
+                    words = auto_name_source.split()[:8]
+                    if asset_type == "briefing":
+                        auto_name = f"{task['title']} briefing"
+                    else:
+                        auto_name = " ".join(words) if words else "Activo sin título"
+                    st.caption(
+                        "Se guardará el briefing de ejecución actual."
+                        if asset_type == "briefing"
+                        else "Se guardará el contenido visible del resultado o preview."
+                    )
 
                     # Campo 1: Nombre del activo
                     asset_name = st.text_input(
@@ -3722,9 +4008,9 @@ Para obtener el resultado real, conecta un motor en Configuración.
                     )
 
                     # Campo 2: Proyecto
-                    project_options = [p["name"] for p in projects] if projects else ["Sin proyecto"]
+                    project_options = [p["name"] for p in all_projects] if all_projects else ["Sin proyecto"]
                     selected_project_idx = 0
-                    for idx, p in enumerate(projects):
+                    for idx, p in enumerate(all_projects):
                         if p["id"] == pid:
                             selected_project_idx = idx
                             break
@@ -3753,24 +4039,41 @@ Para obtener el resultado real, conecta un motor en Configuración.
                     with btn_col1:
                         if st.button("✓ Guardar activo", use_container_width=True, key=f"confirm_save_{tid}"):
                             # Guardar el activo
-                            selected_proj_id = next((p["id"] for p in projects if p["name"] == asset_project), pid)
-                            create_asset(
+                            selected_proj_id = next((p["id"] for p in all_projects if p["name"] == asset_project), pid)
+                            asset_id = create_asset(
                                 selected_proj_id,
                                 tid,
                                 asset_name,
                                 asset_description,
-                                output.strip()
+                                source_content,
+                                asset_type=asset_type,
+                                source_execution_id=int(row_value(latest_run, "id", 0) or 0) or None,
+                                source_execution_status=current_state,
                             )
 
                             # Limpiar estado
                             st.session_state[save_panel_key] = False
+                            for key_name in (
+                                f"asset_type_{tid}",
+                                f"asset_name_{tid}",
+                                f"asset_project_{tid}",
+                                f"asset_desc_{tid}",
+                            ):
+                                st.session_state.pop(key_name, None)
+                            st.session_state["selected_asset_id"] = asset_id if selected_proj_id == pid else None
                             st.success(f"✨ **{asset_name}** guardado en **{asset_project}** como activo reutilizable")
-                            st.balloons()  # Celebración visual
                             st.rerun()
 
                     with btn_col2:
                         if st.button("✕ Cancelar", use_container_width=True, key=f"cancel_save_{tid}"):
                             st.session_state[save_panel_key] = False
+                            for key_name in (
+                                f"asset_type_{tid}",
+                                f"asset_name_{tid}",
+                                f"asset_project_{tid}",
+                                f"asset_desc_{tid}",
+                            ):
+                                st.session_state.pop(key_name, None)
                             st.rerun()
 
             # BLOQUE DE RESULTADO MEJORADO (después del original)
@@ -3938,8 +4241,28 @@ Para obtener el resultado real, conecta un motor en Configuración.
         if assets:
             with st.expander(f"🎯 Activos relacionados ({len(assets)})", expanded=False):
                 for a in assets[:10]:
-                    st.markdown(f"**{a['title']}**")
-                    st.caption(a["summary"] or "Sin resumen")
+                    st.markdown(f"**{a['title']}** · {asset_type_label(a['asset_type'])}")
+                    origin_parts = []
+                    if row_value(a, "task_title"):
+                        origin_parts.append(row_value(a, "task_title"))
+                    if row_value(a, "source_execution_status"):
+                        origin_parts.append(task_state_caption(row_value(a, "source_execution_status")))
+                    if row_value(a, "created_at"):
+                        origin_parts.append(format_time_ago(row_value(a, "created_at")))
+                    if origin_parts:
+                        st.caption(" · ".join(origin_parts))
+                    preview = asset_preview_text(a)
+                    if preview:
+                        st.caption(preview)
+                    asset_col1, asset_col2 = st.columns([1.2, 1.8])
+                    with asset_col1:
+                        if st.button("Abrir activo", key=f"open_asset_{a['id']}", use_container_width=True):
+                            open_asset_workspace(pid, a["id"])
+                            st.rerun()
+                    with asset_col2:
+                        if st.button("Usar como base", key=f"use_asset_{a['id']}", use_container_width=True):
+                            reuse_asset_as_task_base(pid, a)
+                            st.rerun()
                     st.divider()
         else:
             with st.expander("🎯 Activos relacionados (0)", expanded=False):

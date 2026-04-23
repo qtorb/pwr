@@ -332,9 +332,21 @@ def run_basic_smoke() -> int:
             "artifact_md_path",
             "artifact_json_path",
         }
+        required_asset_columns = {
+            "project_id",
+            "task_id",
+            "source_execution_id",
+            "asset_type",
+            "source_execution_status",
+            "summary",
+            "content",
+            "artifact_md_path",
+            "artifact_json_path",
+        }
 
         failures += 0 if check(required_task_columns <= table_columns(conn, "tasks"), "tasks schema matches live runtime") else 1
         failures += 0 if check(required_history_columns <= table_columns(conn, "executions_history"), "executions_history schema matches live runtime") else 1
+        failures += 0 if check(required_asset_columns <= table_columns(conn, "assets"), "assets schema matches reusable-assets runtime") else 1
         failures += 0 if check(project_id is not None, "at least one project is available") else 1
 
     new_task = run_app({"view": "new_task"})
