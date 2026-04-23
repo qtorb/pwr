@@ -2023,20 +2023,69 @@ def render_header():
 
 
 def get_recent_executed_tasks(limit: int = 3) -> List[Dict]:
-    """Get recently executed tasks across all projects, ordered by updated_at DESC"""
+    """Get recent tasks relevant for Home re-entry, ordered by recency or re-entry priority."""
+    return get_recent_home_tasks(limit=limit, states=("executed",), prioritize_reentry=False)
+
+
+def home_task_icon(state: str) -> str:
+    return {
+        "executed": "✅",
+        "preview": "📝",
+        "failed": "⚠️",
+        "pending": "⏳",
+        "draft": "🗒️",
+    }.get(state, "📌")
+
+
+def home_task_action_label(state: str) -> str:
+    return {
+        "executed": "Abrir",
+        "preview": "Retomar",
+        "failed": "Revisar",
+        "pending": "Retomar",
+        "draft": "Abrir",
+    }.get(state, "Abrir")
+
+
+def get_recent_home_tasks(
+    limit: int = 5,
+    states: tuple[str, ...] = ("pending", "preview", "failed", "executed"),
+    today_only: bool = False,
+    prioritize_reentry: bool = False,
+) -> List[Dict]:
     conn = get_conn()
+    state_expr = "COALESCE(NULLIF(t.execution_status, ''), NULLIF(t.status, ''), 'pending')"
+    placeholders = ", ".join(["?"] * len(states))
+    where_clauses = [f"{state_expr} IN ({placeholders})"]
+    params: list = list(states)
+
+    if today_only:
+        where_clauses.append("date(t.updated_at) = date('now', 'localtime')")
+
+    order_by = "t.updated_at DESC"
+    if prioritize_reentry:
+        order_by = (
+            "CASE "
+            f"WHEN {state_expr} = 'failed' THEN 0 "
+            f"WHEN {state_expr} = 'preview' THEN 1 "
+            f"WHEN {state_expr} = 'pending' THEN 2 "
+            f"WHEN {state_expr} = 'executed' THEN 3 "
+            "ELSE 4 END, t.updated_at DESC"
+        )
+
     rows = conn.execute(
-        """
+        f"""
         SELECT
             t.id, t.project_id, t.title, t.task_type, t.suggested_model,
-            t.updated_at, p.name as project_name
+            t.updated_at, p.name as project_name,
+            {state_expr} AS execution_status
         FROM tasks t
-        JOIN projects p ON t.project_id = p.id
-        WHERE COALESCE(NULLIF(t.execution_status, ''), t.status) = 'executed'
-        ORDER BY t.updated_at DESC
+        LEFT JOIN projects p ON t.project_id = p.id
+        WHERE {' AND '.join(where_clauses)}
+        ORDER BY {order_by}
         LIMIT ?
         """,
-        (limit,)
+        (*params, limit)
     ).fetchall()
     return [dict(row) for row in rows]
 
@@ -2883,48 +2932,38 @@ def home_view():
     # ==================== SECCIÓN: HOY (Historial del día) ====================
     st.markdown("#### Hoy")
 
-    today_tasks = []
-    with get_conn() as conn:
-        cursor = conn.execute("""
-            SELECT
-                t.id,
-                t.title,
-                t.project_id,
-                p.name AS project_name,
-                t.updated_at
-            FROM tasks t
-            LEFT JOIN projects p ON p.id = t.project_id
-            WHERE date(t.updated_at) = date('now', 'localtime')
-              AND COALESCE(NULLIF(t.execution_status, ''), t.status) = 'executed'
-            ORDER BY t.updated_at DESC
-            LIMIT 5
-        """)
-        today_tasks = [dict(row) for row in cursor.fetchall()]
+    today_tasks = get_recent_home_tasks(limit=6, today_only=True)
 
     if not today_tasks:
-        st.caption("📋 Sin ejecuciones hoy")
+        st.caption("📋 Sin actividad reciente hoy")
     else:
         for task in today_tasks:
             time_ago = format_time_ago(task.get("updated_at", ""))
+            state = normalize_execution_state(task.get("execution_status")) or "pending"
+            state_label = task_state_caption(state)
             col1, col2 = st.columns([0.85, 0.15])
             with col1:
-                st.markdown(f"✅ **{task['title'][:45]}**")
+                st.markdown(f"{home_task_icon(state)} **{task['title'][:45]}**")
                 project_name = task.get('project_name') or "Sin proyecto"
-                st.caption(f"{project_name} · {time_ago}")
+                st.caption(f"{project_name} · {state_label} · {time_ago}")
             with col2:
-                if st.button("→", key=f"home_today_{task['id']}", help="Abrir", use_container_width=True):
+                if st.button("Abrir", key=f"home_today_{task['id']}", help="Abrir", use_container_width=True):
                     open_task_workspace(task["project_id"], task["id"])
                     st.rerun()
 
     st.divider()
 
     # ==================== OPCIÓN 1: RETOMAR TRABAJO ====================
-    st.markdown("#### Trabajo en progreso")
+    st.markdown("#### Para retomar")
 
-    recent_tasks = get_recent_executed_tasks(limit=5)
+    recent_tasks = get_recent_home_tasks(
+        limit=6,
+        states=("failed", "preview", "pending"),
+        prioritize_reentry=False,
+    )
 
     if not recent_tasks:
-        st.caption("📋 Sin tareas ejecutadas aún. Captura una para comenzar.")
+        st.caption("📋 Sin tareas abiertas o con fallo para retomar.")
     else:
         cols_per_row = 3
         for i in range(0, len(recent_tasks), cols_per_row):
@@ -2932,9 +2971,12 @@ def home_view():
             for j, task in enumerate(recent_tasks[i:i+cols_per_row]):
                 with cols[j]:
                     time_ago = format_time_ago(task.get("updated_at", ""))
-                    st.markdown(f"**📌 {task['title'][:40]}**")
-                    st.caption(f"{task['project_name']} · {time_ago}")
-                    if st.button("Continuar", key=f"home_continue_{task['id']}", use_container_width=True):
+                    state = normalize_execution_state(task.get("execution_status")) or "pending"
+                    state_label = task_state_caption(state)
+                    project_name = task.get("project_name") or "Sin proyecto"
+                    st.markdown(f"**{home_task_icon(state)} {task['title'][:40]}**")
+                    st.caption(f"{project_name} · {state_label} · {time_ago}")
+                    if st.button(home_task_action_label(state), key=f"home_continue_{task['id']}", use_container_width=True):
                         open_task_workspace(task["project_id"], task["id"])
                         st.rerun()
 
