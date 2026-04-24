@@ -249,23 +249,30 @@ def main() -> int:
                 f"nextjs shell could not start after retrying ports: {startup_error or '(no output)'}"
             )
 
-        if "Home MVP paralela" in home_html and "Proyectos" in home_html and "Para retomar" in home_html:
+        if "PWR listo para dogfooding" in home_html and "Proyectos" in home_html and "Crear tarea" in home_html:
             ok("home route renders expected readonly shell content")
         else:
             fail("home route is missing expected content")
             failures += 1
 
+        tasks_html = wait_for_http(f"{frontend_base}/tasks", timeout=60.0)
+        if "Tareas" in tasks_html and "Crear tarea" in tasks_html and "Para retomar" in tasks_html:
+            ok("tasks route renders expected creation and reentry content")
+        else:
+            fail("tasks route is missing expected content")
+            failures += 1
+
         observatory_html = wait_for_http(f"{frontend_base}/observatory", timeout=60.0)
         if (
             "Model Observatory" in observatory_html
-            and "provider" in observatory_html
-            and "success_rate" in observatory_html
-            and "preview_rate" in observatory_html
-            and "failed_rate" in observatory_html
-            and "avg_latency_ms" in observatory_html
-            and "avg_cost_usd" in observatory_html
-            and "conversion_rate" in observatory_html
-            and "reuse_rate" in observatory_html
+            and "Provider" in observatory_html
+            and "Success" in observatory_html
+            and "Preview" in observatory_html
+            and "Failed" in observatory_html
+            and "Latency" in observatory_html
+            and "Cost" in observatory_html
+            and "Conversion" in observatory_html
+            and "Reuse" in observatory_html
             and "Best hints" in observatory_html
             and "quality" in observatory_html
             and "confidence" in observatory_html
@@ -299,7 +306,7 @@ def main() -> int:
             "Contexto del proyecto" in project_html
             and "Tareas" in project_html
             and "Activos relacionados" in project_html
-            and "Solo lectura" in project_html
+            and "Workspace de proyecto en modo lectura" in project_html
             and f"/tasks/{controlled_task_id}" in project_html
         ):
             ok(f"project readonly route renders expected content for project_id={project_id}")
@@ -310,15 +317,15 @@ def main() -> int:
         task_html = wait_for_http(f"{frontend_base}/tasks/{controlled_task_id}", timeout=60.0)
         if (
             controlled_task["title"] in task_html
+            and "Hint experimental" in task_html
             and "Contexto" in task_html
             and "Ejecucion" in task_html
-            and "Output" in task_html
+            and "Resultado" in task_html
             and "Historial" in task_html
             and f"/projects/{project_id}" in task_html
             and "Ejecutar ahora" in task_html
-            and "Hint experimental:" in task_html
-            and "confianza " in task_html
-            and "basado en" in task_html
+            and "Confianza" in task_html
+            and "ejecuciones observadas" in task_html
         ):
             ok(f"task readonly route renders expected content for task_id={controlled_task_id}")
         else:

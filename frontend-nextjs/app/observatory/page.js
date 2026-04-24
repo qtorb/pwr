@@ -1,16 +1,24 @@
 import Link from "next/link";
 
+import AppHeader from "../_components/app-header";
 import { getModelObservatorySummaryData } from "../../lib/pwr-api";
 
 export const dynamic = "force-dynamic";
 
 function formatRate(value) {
-  return `${Math.round(Number(value || 0) * 100)}%`;
+  return new Intl.NumberFormat("es-ES", {
+    style: "percent",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+  }).format(Number(value || 0));
 }
 
 function formatNumber(value, digits = 2) {
   if (value === null || value === undefined) return "-";
-  return Number(value).toFixed(digits);
+  return new Intl.NumberFormat("es-ES", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: digits,
+  }).format(Number(value));
 }
 
 function formatTaskType(value) {
@@ -19,13 +27,17 @@ function formatTaskType(value) {
 
 function BestHintCard({ hint }) {
   return (
-    <div className="summary-pill" key={`${hint.provider}-${hint.model}-${hint.task_type}`}>
+    <div className="summary-pill observatory-hint-card" key={`${hint.provider}-${hint.model}-${hint.task_type}`}>
       <strong>{hint.model || "-"}</strong>
-      <span>{hint.provider || "-"} · {formatTaskType(hint.task_type)}</span>
-      <span>score {formatNumber(hint.score, 4)} · confianza {hint.confidence || "-"}</span>
       <span>
-        quality {formatNumber(hint.quality_score, 4)} · cost {formatNumber(hint.cost_efficiency, 4)} · latency{" "}
-        {formatNumber(hint.latency_efficiency, 4)} · reliability {formatNumber(hint.reliability_score, 4)}
+        {hint.provider || "-"} | {formatTaskType(hint.task_type)}
+      </span>
+      <span>
+        score {formatNumber(hint.score, 3)} | confianza {hint.confidence || "-"}
+      </span>
+      <span>
+        quality {formatNumber(hint.quality_score, 3)} | cost {formatNumber(hint.cost_efficiency, 3)} |
+        latency {formatNumber(hint.latency_efficiency, 3)} | reliability {formatNumber(hint.reliability_score, 3)}
       </span>
       <span>{hint.reason || "Sin motivo disponible."}</span>
     </div>
@@ -38,22 +50,14 @@ export default async function ObservatoryPage() {
 
     return (
       <main className="shell">
-        <header className="topbar">
-          <div className="topbar-inner">
-            <div className="brand-block">
-              <div className="brand">PWR</div>
-              <div className="subtle">Model Observatory minimal desde Next.js</div>
-            </div>
-            <div className="status-chip ok">API conectada</div>
-          </div>
-        </header>
+        <AppHeader subtitle="Observatorio minimo sobre uso real de modelos" statusText="API conectada" statusTone="ok" />
 
         <div className="page">
           <section className="hero">
             <div className="breadcrumbs">
               <Link href="/">Home</Link>
               <span>/</span>
-              <span>Observatorio</span>
+              <span>Observatory</span>
             </div>
             <h1>Model Observatory</h1>
             <p>Aprendizaje observable sobre uso de modelos. No ejecuta routing automatico.</p>
@@ -65,7 +69,7 @@ export default async function ObservatoryPage() {
             <div className="panel-body">
               <div className="band-head">
                 <h2>Resumen por modelo</h2>
-                <div className="subtle">Metricas observadas sobre uso real y conversion en activos.</div>
+                <div className="subtle">Metricas observadas sobre uso real, coste, latencia y conversion.</div>
               </div>
 
               {!summary.length ? (
@@ -75,17 +79,17 @@ export default async function ObservatoryPage() {
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th>provider</th>
-                        <th>model</th>
-                        <th>task_type</th>
-                        <th>total_runs</th>
-                        <th>success_rate</th>
-                        <th>preview_rate</th>
-                        <th>failed_rate</th>
-                        <th>avg_latency_ms</th>
-                        <th>avg_cost_usd</th>
-                        <th>conversion_rate</th>
-                        <th>reuse_rate</th>
+                        <th>Provider</th>
+                        <th>Model</th>
+                        <th>Task type</th>
+                        <th className="num">Runs</th>
+                        <th className="num">Success</th>
+                        <th className="num">Preview</th>
+                        <th className="num">Failed</th>
+                        <th className="num">Latency</th>
+                        <th className="num">Cost</th>
+                        <th className="num">Conversion</th>
+                        <th className="num">Reuse</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -94,14 +98,14 @@ export default async function ObservatoryPage() {
                           <td>{row.provider || "-"}</td>
                           <td>{row.model || "-"}</td>
                           <td>{formatTaskType(row.task_type)}</td>
-                          <td>{row.total_runs || 0}</td>
-                          <td>{formatRate(row.success_rate)}</td>
-                          <td>{formatRate(row.preview_rate)}</td>
-                          <td>{formatRate(row.failed_rate)}</td>
-                          <td>{formatNumber(row.avg_latency_ms, 0)}</td>
-                          <td>{formatNumber(row.avg_cost_usd, 6)}</td>
-                          <td>{formatRate(row.conversion_rate)}</td>
-                          <td>{formatRate(row.reuse_rate)}</td>
+                          <td className="num">{row.total_runs || 0}</td>
+                          <td className="num">{formatRate(row.success_rate)}</td>
+                          <td className="num">{formatRate(row.preview_rate)}</td>
+                          <td className="num">{formatRate(row.failed_rate)}</td>
+                          <td className="num">{row.avg_latency_ms === null || row.avg_latency_ms === undefined ? "-" : `${formatNumber(row.avg_latency_ms, 0)} ms`}</td>
+                          <td className="num">{formatNumber(row.avg_cost_usd, 3)}</td>
+                          <td className="num">{formatRate(row.conversion_rate)}</td>
+                          <td className="num">{formatRate(row.reuse_rate)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -116,7 +120,7 @@ export default async function ObservatoryPage() {
               <div className="panel-body">
                 <div className="band-head">
                   <h2>Best hints</h2>
-                  <div className="subtle">Hints experimentales por task_type. No cambian el routing real.</div>
+                  <div className="subtle">Hints experimentales por task type. No cambian el routing real.</div>
                 </div>
                 <div className="summary-grid">
                   {bestHints.map((hint) => (
@@ -138,22 +142,14 @@ export default async function ObservatoryPage() {
   } catch (error) {
     return (
       <main className="shell">
-        <header className="topbar">
-          <div className="topbar-inner">
-            <div className="brand-block">
-              <div className="brand">PWR</div>
-              <div className="subtle">Model Observatory minimal desde Next.js</div>
-            </div>
-            <div className="status-chip">Error</div>
-          </div>
-        </header>
+        <AppHeader subtitle="Observatorio minimo sobre uso real de modelos" statusText="Error" statusTone="default" />
 
         <div className="page">
           <section className="hero">
             <div className="breadcrumbs">
               <Link href="/">Home</Link>
               <span>/</span>
-              <span>Observatorio</span>
+              <span>Observatory</span>
             </div>
             <h1>Model Observatory</h1>
             <p>No fue posible cargar el observatorio con la API actual.</p>

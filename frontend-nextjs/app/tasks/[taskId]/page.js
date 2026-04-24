@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import AppHeader from "../../_components/app-header";
 import { getTaskDetailData } from "../../../lib/pwr-api";
 import TaskAssetPanel from "./task-asset-panel";
 import TaskExecutionPanel from "./task-execution-panel";
@@ -75,9 +76,26 @@ function ExecutionHistory({ items }) {
   );
 }
 
+function RecommendationHint({ recommendation }) {
+  if (!recommendation) return null;
+
+  return (
+    <section className="hint-callout">
+      <div className="hint-label">Hint experimental</div>
+      <div className="hint-title">{recommendation.model || "Modelo sugerido"}</div>
+      <div className="hint-meta">
+        <span>Confianza {confidenceCopy(recommendation.confidence)}</span>
+        <span>{recommendation.total_runs || 0} ejecuciones observadas</span>
+        {recommendation.provider ? <span>{recommendation.provider}</span> : null}
+      </div>
+      {recommendation.reason ? <div className="subtle">{recommendation.reason}</div> : null}
+    </section>
+  );
+}
+
 function OutputPanel({ task, latestExecution }) {
   const state = String(
-    latestExecution?.execution_status || task?.execution_status || task?.status || "pending"
+    latestExecution?.execution_status || task?.execution_status || task?.status || "pending",
   ).toLowerCase();
   const outputText = latestExecution?.output_text || task?.llm_output || "";
   const errorText = latestExecution?.error_message || "";
@@ -96,9 +114,9 @@ function OutputPanel({ task, latestExecution }) {
   if (state === "executed" || state === "preview") {
     return (
       <div className="info-block">
-        <div className="label">{state === "preview" ? "Preview" : "Output"}</div>
+        <div className="label">{state === "preview" ? "Preview" : "Resultado"}</div>
         <pre className="content-block">
-          {outputText || task?.router_summary || "Sin output visible para esta tarea."}
+          {outputText || task?.router_summary || "Sin resultado visible para esta tarea."}
         </pre>
       </div>
     );
@@ -114,27 +132,22 @@ function OutputPanel({ task, latestExecution }) {
 export default async function TaskDetailPage({ params, searchParams }) {
   const { taskId } = await params;
   const resolvedSearchParams = (await searchParams) || {};
-  const { apiBaseUrl, task, latestExecution, executions, recommendation, errors, missing } = await getTaskDetailData(taskId);
+  const { apiBaseUrl, task, latestExecution, executions, recommendation, errors, missing } =
+    await getTaskDetailData(taskId);
 
   if (!task) {
     return (
       <main className="shell">
-        <header className="topbar">
-          <div className="topbar-inner">
-            <div className="brand-block">
-              <div className="brand">PWR</div>
-              <div className="subtle">Task detail readonly desde Next.js</div>
-            </div>
-            <div className="status-chip">API en revision</div>
-          </div>
-        </header>
+        <AppHeader subtitle="Detalle operativo de tarea" statusText="API en revision" statusTone="default" />
 
         <div className="page">
           <section className="hero">
             <div className="breadcrumbs">
               <Link href="/">Home</Link>
               <span>/</span>
-              <span>Tareas</span>
+              <Link href="/tasks">Tasks</Link>
+              <span>/</span>
+              <span>Tarea</span>
             </div>
             <h1>{missing ? "Tarea no encontrada" : "Tarea no disponible"}</h1>
             <p>
@@ -155,7 +168,10 @@ export default async function TaskDetailPage({ params, searchParams }) {
                   </ul>
                 </div>
               ) : null}
-              <div>
+              <div className="stack compact">
+                <Link href="/tasks" className="inline-link">
+                  Volver a Tasks
+                </Link>
                 <Link href="/" className="inline-link">
                   Volver a Home
                 </Link>
@@ -169,28 +185,24 @@ export default async function TaskDetailPage({ params, searchParams }) {
 
   const taskState = latestExecution?.execution_status || task.execution_status || task.status || "pending";
   const updatedState = resolvedSearchParams.updated === "1" ? resolvedSearchParams.status || "" : "";
+  const createdTask = resolvedSearchParams.created === "1";
   const fromAsset = resolvedSearchParams.fromAsset === "1";
   const resultContent = String(latestExecution?.output_text || task.llm_output || "").trim();
   const briefingContent = String(task.context || task.description || task.router_summary || "").trim();
-  const canSaveAsset = ["preview", "executed"].includes(String(taskState).toLowerCase()) && Boolean(resultContent || briefingContent);
+  const canSaveAsset =
+    ["preview", "executed"].includes(String(taskState).toLowerCase()) && Boolean(resultContent || briefingContent);
   const defaultAssetType = String(taskState).toLowerCase() === "preview" ? "preview" : "output";
 
   return (
     <main className="shell">
-      <header className="topbar">
-        <div className="topbar-inner">
-          <div className="brand-block">
-            <div className="brand">PWR</div>
-            <div className="subtle">Task detail readonly desde Next.js</div>
-          </div>
-          <div className="status-chip ok">API conectada</div>
-        </div>
-      </header>
+      <AppHeader subtitle="Detalle operativo de tarea" statusText="API conectada" statusTone="ok" />
 
       <div className="page">
         <section className="hero">
           <div className="breadcrumbs">
             <Link href="/">Home</Link>
+            <span>/</span>
+            <Link href="/tasks">Tasks</Link>
             <span>/</span>
             <Link href={`/projects/${task.project_id}`}>Proyecto {task.project_id}</Link>
             <span>/</span>
@@ -200,16 +212,14 @@ export default async function TaskDetailPage({ params, searchParams }) {
             <h1>{task.title || `Tarea ${task.id}`}</h1>
             <StateBadge state={taskState} />
           </div>
-          <p>Vista readonly de tarea compuesta desde FastAPI sin cambiar Streamlit.</p>
+          <p>
+            Detalle operativo de la tarea sobre FastAPI. Desde aqui puedes revisar contexto, ejecutar y
+            convertir resultado en activo reutilizable.
+          </p>
           <div className="subtle">API base actual: {apiBaseUrl}</div>
         </section>
 
-        {recommendation ? (
-          <section className="feedback-banner">
-            Hint experimental: {recommendation.model} · confianza {confidenceCopy(recommendation.confidence)} ·
-            {" "}basado en {recommendation.total_runs || 0} ejecuciones
-          </section>
-        ) : null}
+        <RecommendationHint recommendation={recommendation} />
 
         {errors.length ? (
           <section className="panel">
@@ -224,10 +234,12 @@ export default async function TaskDetailPage({ params, searchParams }) {
           </section>
         ) : null}
 
+        {createdTask ? (
+          <section className="feedback-banner ok">Tarea creada. Ya puedes ejecutar o seguir afinando el briefing.</section>
+        ) : null}
+
         {updatedState ? (
-          <section className="feedback-banner ok">
-            Actualizado. Estado actual: {stateCopy(updatedState)}.
-          </section>
+          <section className="feedback-banner ok">Actualizado. Estado actual: {stateCopy(updatedState)}.</section>
         ) : null}
 
         {fromAsset ? (
@@ -241,12 +253,12 @@ export default async function TaskDetailPage({ params, searchParams }) {
             <div className="panel">
               <div className="panel-body">
                 <div className="band-head">
-                  <h2>Contexto</h2>
-                  <div className="subtle">Task #{task.id}</div>
+                  <h2>Tarea</h2>
+                  <div className="subtle">Contexto operativo</div>
                 </div>
                 <div className="stack">
                   <div className="info-block">
-                    <div className="label">Project</div>
+                    <div className="label">Proyecto</div>
                     <div>Proyecto {task.project_id}</div>
                   </div>
                   <div className="info-block">
@@ -254,11 +266,24 @@ export default async function TaskDetailPage({ params, searchParams }) {
                     <div>{task.task_type || "Pensar"}</div>
                   </div>
                   <div className="info-block">
-                    <div className="label">Contexto</div>
-                    <pre className="content-block">
-                      {task.context || task.description || "Sin contexto visible para esta tarea."}
-                    </pre>
+                    <div className="label">Resumen</div>
+                    <div>{task.description || task.router_summary || "Sin resumen visible para esta tarea."}</div>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="panel">
+              <div className="panel-body">
+                <div className="band-head">
+                  <h2>Briefing</h2>
+                  <div className="subtle">Base de trabajo actual</div>
+                </div>
+                <div className="info-block">
+                  <div className="label">Contexto</div>
+                  <pre className="content-block">
+                    {task.context || task.description || "Sin contexto visible para esta tarea."}
+                  </pre>
                 </div>
               </div>
             </div>
@@ -276,7 +301,7 @@ export default async function TaskDetailPage({ params, searchParams }) {
                       <div>{latestExecution.execution_status || "Sin estado visible."}</div>
                     </div>
                     <div className="info-block">
-                      <div className="label">Modelo / provider</div>
+                      <div className="label">Modelo y provider</div>
                       <div>
                         {latestExecution.provider || "provider?"} / {latestExecution.model || "modelo?"}
                       </div>
@@ -303,8 +328,8 @@ export default async function TaskDetailPage({ params, searchParams }) {
             <div className="panel">
               <div className="panel-body">
                 <div className="band-head">
-                  <h2>Output</h2>
-                  <div className="subtle">Readonly</div>
+                  <h2>Resultado</h2>
+                  <div className="subtle">Ultima salida visible</div>
                 </div>
                 <OutputPanel task={task} latestExecution={latestExecution} />
               </div>
@@ -332,10 +357,13 @@ export default async function TaskDetailPage({ params, searchParams }) {
               <div className="panel-body stack">
                 <div className="band-head">
                   <h2>Navegacion</h2>
-                  <div className="subtle">Readonly + ejecucion</div>
+                  <div className="subtle">Movimiento rapido</div>
                 </div>
                 <Link href={`/projects/${task.project_id}`} className="inline-link">
                   Volver al proyecto
+                </Link>
+                <Link href="/tasks" className="inline-link">
+                  Volver a Tasks
                 </Link>
                 <Link href="/" className="inline-link">
                   Volver a Home

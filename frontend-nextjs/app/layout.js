@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "PWR Next.js Shell",
-  description: "Parallel Next.js shell for PWR consuming the FastAPI backend.",
+  title: "PWR",
+  description: "Next.js shell for PWR consuming the FastAPI backend.",
 };
 
 export default function RootLayout({ children }) {

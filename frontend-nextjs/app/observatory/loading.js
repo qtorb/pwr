@@ -1,15 +1,9 @@
+import AppHeader from "../_components/app-header";
+
 export default function Loading() {
   return (
     <main className="shell">
-      <header className="topbar">
-        <div className="topbar-inner">
-          <div className="brand-block">
-            <div className="brand">PWR</div>
-            <div className="subtle">Model Observatory minimal desde Next.js</div>
-          </div>
-          <div className="status-chip">Cargando</div>
-        </div>
-      </header>
+      <AppHeader subtitle="Observatorio minimo sobre uso real de modelos" statusText="Cargando" statusTone="default" />
 
       <div className="page">
         <section className="hero">
