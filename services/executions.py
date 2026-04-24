@@ -306,6 +306,87 @@ Para obtener el resultado real, conecta un motor en Configuracion.
     }
 
 
+def infer_manual_provider(model_name: str) -> str:
+    normalized = str(model_name or "").strip().lower()
+    if not normalized:
+        return "manual"
+    if normalized.startswith("gemini"):
+        return "gemini"
+    if normalized.startswith("mock"):
+        return "mock"
+    if "/" in normalized:
+        return normalized.split("/", 1)[0]
+    return "manual"
+
+
+def save_manual_task_result(task_id: int, model_name: str, prompt_text: str, result_text: str) -> dict:
+    normalized_model = str(model_name or "").strip() or "manual-external"
+    normalized_prompt = str(prompt_text or "").strip()
+    normalized_result = str(result_text or "").strip()
+    if not normalized_result:
+        raise ValueError("Result text is required")
+
+    with get_conn() as conn:
+        task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if not task:
+            raise ValueError(f"Task {task_id} not found")
+
+        project = conn.execute("SELECT * FROM projects WHERE id = ?", (task["project_id"],)).fetchone()
+        if not project:
+            raise ValueError(f"Project {task['project_id']} not found for task {task_id}")
+
+        if normalized_prompt != str(row_value(task, "context") or "").strip():
+            conn.execute(
+                """
+                UPDATE tasks
+                SET context = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (normalized_prompt, now_iso(), task_id),
+            )
+
+    provider = infer_manual_provider(normalized_model)
+    router_summary = (
+        "Resultado manual guardado\n"
+        "Modo: manual\n"
+        f"Proveedor: {provider}\n"
+        f"Modelo: {normalized_model}\n\n"
+        "Motivo:\n- Resultado pegado manualmente desde Task Workspace."
+    )
+    router_metrics = {
+        "mode": "manual",
+        "model": normalized_model,
+        "provider": provider,
+        "latency_ms": 0,
+        "estimated_cost": 0.0,
+        "status": "executed",
+        "reasoning_path": "Resultado pegado manualmente desde Task Workspace.",
+        "execution_prompt": normalized_prompt,
+        "error_code": "",
+        "error_message": "",
+        "executed_at": now_iso(),
+        "manual_capture": True,
+        "source": "task-workspace",
+    }
+    save_execution_result(
+        task_id=task_id,
+        model_used=normalized_model,
+        router_summary=router_summary,
+        llm_output=normalized_result,
+        useful_extract=normalized_result[:700],
+        execution_status="executed",
+        router_metrics=router_metrics,
+    )
+
+    latest_run = get_latest_execution_run(task_id)
+    return {
+        "task_id": task_id,
+        "status": "executed",
+        "execution_id": int(row_value(latest_run, "id", 0) or 0) or None,
+        "message": "Resultado manual guardado correctamente.",
+    }
+
+
 def persist_execution_history(
     conn: sqlite3.Connection,
     task_id: int,

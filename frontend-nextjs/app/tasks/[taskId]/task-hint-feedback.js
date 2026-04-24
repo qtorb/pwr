@@ -5,9 +5,9 @@ import { useState, useTransition } from "react";
 import { submitModelFeedbackAction } from "./actions";
 
 const FEEDBACK_OPTIONS = [
-  { value: "useful", label: "👍 util" },
-  { value: "not_useful", label: "👎 no util" },
-  { value: "used_other", label: "↔ use otro modelo" },
+  { value: "useful", label: "util" },
+  { value: "not_useful", label: "no util" },
+  { value: "used_other", label: "use otro modelo" },
 ];
 
 function confidenceCopy(value) {

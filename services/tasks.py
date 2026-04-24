@@ -70,6 +70,19 @@ def summarize_router_decision(decision) -> str:
     )
 
 
+def infer_provider_from_model(model_name: str, fallback: str = "") -> str:
+    normalized = str(model_name or "").strip().lower()
+    if not normalized:
+        return fallback
+    if normalized.startswith("gemini"):
+        return "gemini"
+    if normalized.startswith("mock"):
+        return "mock"
+    if "/" in normalized:
+        return normalized.split("/", 1)[0]
+    return fallback or "manual"
+
+
 def save_task_files(project_id: int, task_id: int, files) -> List[Dict]:
     dest = project_upload_dir(project_id) / f"task_{task_id:04d}"
     dest.mkdir(parents=True, exist_ok=True)
@@ -89,7 +102,15 @@ def save_task_files(project_id: int, task_id: int, files) -> List[Dict]:
     return saved
 
 
-def create_task(project_id: int, title: str, description: str, task_type: str, context: str, uploaded_files) -> int:
+def create_task(
+    project_id: int,
+    title: str,
+    description: str,
+    task_type: str,
+    context: str,
+    uploaded_files,
+    preferred_model: str = "",
+) -> int:
     created = now_iso()
     with get_conn() as conn:
         project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
@@ -118,15 +139,24 @@ def create_task(project_id: int, title: str, description: str, task_type: str, c
             project=project,
         )
         decision = DecisionEngine(ModelCatalog(conn)).decide(task_input)
-        summary = summarize_router_decision(decision)
+        selected_model = str(preferred_model or "").strip() or decision.model
+        selected_provider = infer_provider_from_model(selected_model, fallback=decision.provider)
+        summary = (
+            f"Preparado para ejecucion\n"
+            f"Modo: {decision.mode}\n"
+            f"Proveedor: {selected_provider}\n"
+            f"Modelo: {selected_model}\n\n"
+            f"Motivo:\n- {decision.reasoning_path}"
+        )
         router_metrics = {
             "mode": decision.mode,
-            "model": decision.model,
-            "provider": decision.provider,
+            "model": selected_model,
+            "provider": selected_provider,
             "complexity_score": decision.complexity_score,
             "status": "pending",
             "reasoning_path": decision.reasoning_path,
             "execution_prompt": build_execution_prompt(task_input),
+            "preferred_model": selected_model,
         }
 
         conn.execute(
@@ -136,7 +166,7 @@ def create_task(project_id: int, title: str, description: str, task_type: str, c
             WHERE id = ?
             """,
             (
-                decision.model,
+                selected_model,
                 summary,
                 json.dumps(task_files, ensure_ascii=False),
                 json.dumps(router_metrics, ensure_ascii=False),

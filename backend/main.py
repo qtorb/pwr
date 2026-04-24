@@ -9,7 +9,12 @@ from pydantic import BaseModel, Field
 
 from db import init_db
 from services.assets import build_asset_reuse_payload, get_asset, get_project_assets, create_asset
-from services.executions import execute_task_now, get_execution_history, get_latest_execution_run
+from services.executions import (
+    execute_task_now,
+    get_execution_history,
+    get_latest_execution_run,
+    save_manual_task_result,
+)
 from services.model_observatory import (
     create_model_feedback,
     create_model_run,
@@ -132,10 +137,17 @@ class CreateProjectTaskRequest(BaseModel):
     description: str = ""
     task_type: str = "Pensar"
     context: str = ""
+    preferred_model: str = ""
 
 
 class CreateTaskRequest(CreateProjectTaskRequest):
     project_id: int
+
+
+class SaveManualTaskResultRequest(BaseModel):
+    model: str = Field(..., min_length=1)
+    prompt: str = ""
+    result_text: str = Field(..., min_length=1)
 
 
 class CreateAssetRequest(BaseModel):
@@ -391,6 +403,7 @@ def project_create_task(project_id: int, payload: CreateProjectTaskRequest) -> d
         task_type=payload.task_type,
         context=payload.context,
         uploaded_files=None,
+        preferred_model=payload.preferred_model,
     )
     task = require_task(task_id)
     return row_to_dict(task)
@@ -406,6 +419,7 @@ def tasks_create(payload: CreateTaskRequest) -> dict[str, Any]:
         task_type=payload.task_type,
         context=payload.context,
         uploaded_files=None,
+        preferred_model=payload.preferred_model,
     )
     return row_to_dict(require_task(task_id))
 
@@ -432,6 +446,20 @@ def task_execute(task_id: int, request: Request) -> dict[str, Any]:
         pass
 
     return payload
+
+
+@app.post("/api/tasks/{task_id}/manual-result")
+def task_manual_result(task_id: int, payload: SaveManualTaskResultRequest) -> dict[str, Any]:
+    require_task(task_id)
+    try:
+        return save_manual_task_result(
+            task_id=task_id,
+            model_name=payload.model,
+            prompt_text=payload.prompt,
+            result_text=payload.result_text,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/tasks/{task_id}/executions")

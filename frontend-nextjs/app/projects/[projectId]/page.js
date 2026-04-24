@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 
 import AppHeader from "../../_components/app-header";
 import { getProjectWorkspaceData } from "../../../lib/pwr-api";
-import TaskQuickCreatePanel from "../../tasks/task-quick-create-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -179,7 +178,17 @@ export default async function ProjectWorkspacePage({ params, searchParams }) {
           </div>
 
           <aside className="workspace-side">
-            <TaskQuickCreatePanel projects={[project]} fixedProject={project} />
+            <div className="panel">
+              <div className="panel-body stack">
+                <div className="band-head">
+                  <h2>Crear tarea en este proyecto</h2>
+                  <div className="subtle">Entrada rapida sin salir del contexto</div>
+                </div>
+                <Link href={`/tasks/workspace?projectId=${project.id}`} className="hero-primary">
+                  Abrir task workspace
+                </Link>
+              </div>
+            </div>
 
             <div className="panel">
               <div className="panel-body">

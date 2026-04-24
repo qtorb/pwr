@@ -134,6 +134,37 @@ export async function getTaskDetailData(taskId) {
   };
 }
 
+export async function getTaskWorkspaceData(taskId = null, projectId = null) {
+  const [health, projects] = await Promise.allSettled([fetchJson("/health"), fetchJson("/api/projects")]);
+  let taskData = null;
+  if (taskId) {
+    taskData = await getTaskDetailData(taskId);
+  }
+
+  const projectItems = projects.status === "fulfilled" ? projects.value.items : [];
+  const selectedProject = taskData?.task?.project_id
+    ? projectItems.find((project) => String(project.id) === String(taskData.task.project_id)) || null
+    : projectId
+      ? projectItems.find((project) => String(project.id) === String(projectId)) || null
+      : projectItems[0] || null;
+
+  return {
+    apiBaseUrl: DEFAULT_API_BASE_URL,
+    health: health.status === "fulfilled" ? health.value : null,
+    projects: projectItems,
+    selectedProject,
+    taskData,
+    errors: [
+      ...[health, projects]
+        .filter((result) => result.status === "rejected")
+        .map((result) => result.reason?.message || "Unknown API error"),
+      ...(taskData?.errors || []),
+    ],
+  };
+}
+
+export const getQuickTaskData = getTaskWorkspaceData;
+
 export async function getModelObservatorySummaryData() {
   const summaryResponse = await fetchJson("/api/model-runs/summary?limit=50");
   const rows = Array.isArray(summaryResponse.summary) ? summaryResponse.summary : [];

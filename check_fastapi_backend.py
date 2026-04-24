@@ -58,6 +58,7 @@ def main() -> int:
 
     failures = 0
     created_task_id: int | None = None
+    manual_task_id: int | None = None
     created_asset_id: int | None = None
     created_project_id: int | None = None
 
@@ -141,6 +142,7 @@ def main() -> int:
                     "description": "",
                     "task_type": "Pensar",
                     "context": "Controlled task created by check_fastapi_backend.py",
+                    "preferred_model": "gemini-2.5-pro",
                 },
             )
             if create_task_response.status_code != 200:
@@ -149,6 +151,53 @@ def main() -> int:
             created_task = create_task_response.json()
             created_task_id = int(created_task["id"])
             ok(f"created controlled task through HTTP id={created_task_id}")
+            if created_task.get("suggested_model") == "gemini-2.5-pro":
+                ok("task creation accepts preferred_model for low-friction workspace flows")
+            else:
+                fail("task creation did not keep the requested preferred_model")
+                failures += 1
+
+            manual_task_response = client.post(
+                "/api/tasks",
+                json={
+                    "project_id": created_project_id,
+                    "title": "[FASTAPI CHECK] Manual capture task",
+                    "description": "",
+                    "task_type": "Pensar",
+                    "context": "Prompt inicial para validar guardado manual.",
+                    "preferred_model": "mock-racing",
+                },
+            )
+            if manual_task_response.status_code != 200:
+                fail("manual capture task creation failed")
+                return 1
+            manual_task_id = int(manual_task_response.json()["id"])
+            ok(f"created manual capture task id={manual_task_id}")
+
+            manual_save_response = client.post(
+                f"/api/tasks/{manual_task_id}/manual-result",
+                json={
+                    "model": "mock-racing",
+                    "prompt": "Prompt manual actualizado desde Task Workspace.",
+                    "result_text": "Resultado manual controlado para validar el flujo unificado.",
+                },
+            )
+            manual_task_after_save = client.get(f"/api/tasks/{manual_task_id}")
+            manual_latest_execution = client.get(f"/api/tasks/{manual_task_id}/executions/latest")
+            if (
+                manual_save_response.status_code == 200
+                and manual_save_response.json().get("status") == "executed"
+                and manual_task_after_save.status_code == 200
+                and manual_task_after_save.json().get("execution_status") == "executed"
+                and manual_task_after_save.json().get("context") == "Prompt manual actualizado desde Task Workspace."
+                and manual_latest_execution.status_code == 200
+                and manual_latest_execution.json().get("item")
+                and manual_latest_execution.json()["item"].get("output_text") == "Resultado manual controlado para validar el flujo unificado."
+            ):
+                ok("manual result endpoint saves prompt/result and updates task state")
+            else:
+                fail("manual result endpoint did not persist the expected manual execution")
+                failures += 1
 
             filtered_tasks_response = client.get("/api/tasks", params={"project_id": created_project_id})
             global_tasks_response = client.get("/api/tasks", params={"limit": 20})
@@ -369,10 +418,12 @@ def main() -> int:
         fail(f"unexpected error: {type(exc).__name__}: {exc}")
         failures += 1
     finally:
+        cleanup(None, manual_task_id, None)
         cleanup(created_asset_id, created_task_id, created_project_id)
-        if created_task_id or created_asset_id or created_project_id:
+        if manual_task_id or created_task_id or created_asset_id or created_project_id:
             ok(
                 "cleaned controlled HTTP test data"
+                f"{f' manual_task={manual_task_id}' if manual_task_id else ''}"
                 f"{f' task={created_task_id}' if created_task_id else ''}"
                 f"{f' asset={created_asset_id}' if created_asset_id else ''}"
                 f"{f' project={created_project_id}' if created_project_id else ''}"

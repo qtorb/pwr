@@ -109,6 +109,11 @@ export default async function TasksPage({ searchParams }) {
             </p>
             <div className="subtle">API base actual: {apiBaseUrl}</div>
           </div>
+          <div className="hero-actions">
+            <Link href="/tasks/workspace" className="hero-primary">
+              Abrir task workspace
+            </Link>
+          </div>
         </section>
 
         {errors.length ? (
@@ -157,6 +162,18 @@ export default async function TasksPage({ searchParams }) {
           </div>
 
           <aside className="workspace-side">
+            <div className="panel">
+              <div className="panel-body stack">
+                <div className="band-head">
+                  <h2>Task Workspace</h2>
+                  <div className="subtle">Carril rapido para escribir, copiar y guardar</div>
+                </div>
+                <Link href="/tasks/workspace" className="hero-primary">
+                  Abrir workspace
+                </Link>
+              </div>
+            </div>
+
             <TaskQuickCreatePanel projects={projects} />
 
             <div className="panel">

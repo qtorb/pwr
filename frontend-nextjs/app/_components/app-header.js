@@ -6,7 +6,16 @@ import { usePathname } from "next/navigation";
 const NAV_ITEMS = [
   { href: "/", label: "Home", isActive: (pathname) => pathname === "/" },
   { href: "/projects", label: "Projects", isActive: (pathname) => pathname.startsWith("/projects") },
-  { href: "/tasks", label: "Tasks", isActive: (pathname) => pathname.startsWith("/tasks") },
+  {
+    href: "/tasks/workspace",
+    label: "Workspace",
+    isActive: (pathname) => pathname.startsWith("/tasks/workspace"),
+  },
+  {
+    href: "/tasks",
+    label: "Tasks",
+    isActive: (pathname) => pathname === "/tasks" || /^\/tasks\/\d+$/.test(pathname),
+  },
   {
     href: "/observatory",
     label: "Observatory",

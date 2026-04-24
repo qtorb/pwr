@@ -164,6 +164,7 @@ def main() -> int:
     frontend_proc: subprocess.Popen | None = None
     controlled_project_id: int | None = None
     controlled_task_id: int | None = None
+    workspace_task_id: int | None = None
     reused_task_id: int | None = None
     temp_log_file = tempfile.NamedTemporaryFile(
         prefix="pwr-nextjs-route-smoke-",
@@ -279,6 +280,21 @@ def main() -> int:
             fail("tasks route is missing expected content")
             failures += 1
 
+        workspace_html = wait_for_http(f"{frontend_base}/tasks/workspace", timeout=60.0)
+        if (
+            "Task Workspace" in workspace_html
+            and "Proyecto" in workspace_html
+            and "Modelo" in workspace_html
+            and "Prompt" in workspace_html
+            and "Resultado" in workspace_html
+            and "Copiar prompt" in workspace_html
+            and "Guardar resultado" in workspace_html
+        ):
+            ok("workspace route renders the unified task flow")
+        else:
+            fail("workspace route is missing expected content")
+            failures += 1
+
         observatory_html = wait_for_http(f"{frontend_base}/observatory", timeout=60.0)
         if (
             "Model Observatory" in observatory_html
@@ -328,6 +344,30 @@ def main() -> int:
         controlled_task_id = int(controlled_task["id"])
         ok(f"created controlled task id={controlled_task_id} for route smoke")
 
+        workspace_task = request_json(
+            f"{backend_base}/api/tasks",
+            method="POST",
+            payload={
+                "project_id": controlled_project_id,
+                "title": "Next.js workspace task",
+                "description": "",
+                "task_type": "Pensar",
+                "context": "Prompt base para validar la Task Workspace.",
+                "preferred_model": "mock-racing",
+            },
+        )
+        workspace_task_id = int(workspace_task["id"])
+        request_json(
+            f"{backend_base}/api/tasks/{workspace_task_id}/manual-result",
+            method="POST",
+            payload={
+                "model": "mock-racing",
+                "prompt": "Prompt base para validar la Task Workspace.",
+                "result_text": "Resultado manual visible para la workspace.",
+            },
+        )
+        ok(f"prepared controlled workspace task id={workspace_task_id}")
+
         filtered_tasks_html = wait_for_http(
             f"{frontend_base}/tasks?project_id={controlled_project_id}",
             timeout=60.0,
@@ -340,6 +380,47 @@ def main() -> int:
             ok("tasks route can filter and render project-aware task lists")
         else:
             fail("tasks route did not show the expected project-aware filter view")
+            failures += 1
+
+        workspace_project_html = wait_for_http(
+            f"{frontend_base}/tasks/workspace?projectId={controlled_project_id}",
+            timeout=60.0,
+        )
+        if (
+            "Task Workspace" in workspace_project_html
+            and controlled_project["name"] in workspace_project_html
+            and "Se creara al copiar o guardar" in workspace_project_html
+        ):
+            ok("workspace route accepts project preselection")
+        else:
+            fail("workspace route did not respect the selected project")
+            failures += 1
+
+        workspace_detail_html = wait_for_http(
+            f"{frontend_base}/tasks/workspace?taskId={workspace_task_id}&saved=1",
+            timeout=60.0,
+        )
+        if (
+            workspace_task["title"] in workspace_detail_html
+            and "Resultado guardado." in workspace_detail_html
+            and "Resultado manual visible para la workspace." in workspace_detail_html
+            and "Ver en /tasks" in workspace_detail_html
+            and "Hint experimental" in workspace_detail_html
+            and "mock-racing" in workspace_detail_html
+        ):
+            ok("workspace route renders an existing task with manual result")
+        else:
+            fail("workspace route did not show the expected existing task state")
+            failures += 1
+
+        tasks_after_workspace_html = wait_for_http(
+            f"{frontend_base}/tasks?project_id={controlled_project_id}",
+            timeout=60.0,
+        )
+        if workspace_task["title"] in tasks_after_workspace_html:
+            ok("workspace-saved task appears in the global tasks view")
+        else:
+            fail("workspace-saved task did not appear in /tasks")
             failures += 1
 
         project_html = wait_for_http(f"{frontend_base}/projects/{controlled_project_id}", timeout=60.0)
@@ -567,6 +648,7 @@ def main() -> int:
         failures += 1
     finally:
         cleanup_controlled_task(reused_task_id)
+        cleanup_controlled_task(workspace_task_id)
         cleanup_controlled_task(controlled_task_id)
         cleanup_controlled_project(controlled_project_id)
         terminate_process_tree(frontend_proc)

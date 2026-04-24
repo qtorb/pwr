@@ -103,6 +103,9 @@ export default async function HomePage() {
           </div>
 
           <div className="hero-actions">
+            <Link href="/tasks/workspace" className="hero-primary">
+              Abrir task workspace
+            </Link>
             <Link href="/projects" className="hero-primary">
               Crear proyecto
             </Link>
