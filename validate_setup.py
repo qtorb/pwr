@@ -13,6 +13,7 @@ EXPECTED_PYTHON = (3, 11)
 REQUIRED_FILES = [
     "app_main.py",
     "db.py",
+    "backend/main.py",
     "state_contract.py",
     "requirements.txt",
     "services/__init__.py",
@@ -20,6 +21,7 @@ REQUIRED_FILES = [
     "services/tasks.py",
     "services/executions.py",
     "services/assets.py",
+    "check_fastapi_backend.py",
     "router/domain.py",
     "router/providers.py",
     "router/execution_service.py",
@@ -77,6 +79,18 @@ def main() -> int:
         fail("streamlit missing; run .\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt")
         failures += 1
 
+    if has_module("fastapi"):
+        ok("fastapi importable")
+    else:
+        fail("fastapi missing; run .\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt")
+        failures += 1
+
+    if has_module("uvicorn"):
+        ok("uvicorn importable")
+    else:
+        fail("uvicorn missing; run .\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt")
+        failures += 1
+
     if has_module("google.genai"):
         ok("google-genai importable")
     else:
@@ -95,7 +109,9 @@ def main() -> int:
     for rel_path in (
         "app_main.py",
         "db.py",
+        "backend/main.py",
         "state_contract.py",
+        "check_fastapi_backend.py",
         "services/projects.py",
         "services/tasks.py",
         "services/executions.py",
