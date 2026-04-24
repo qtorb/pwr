@@ -52,3 +52,33 @@ export async function saveAssetAction(payload) {
 
   return body;
 }
+
+export async function submitModelFeedbackAction(payload) {
+  const response = await fetch(`${DEFAULT_API_BASE_URL}/api/model-feedback`, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      task_id: payload.taskId,
+      task_type: payload.taskType,
+      provider: payload.provider,
+      model: payload.model,
+      score: payload.score,
+      confidence: payload.confidence,
+      feedback: payload.feedback,
+    }),
+  });
+
+  const body = await response.json().catch(() => ({
+    error: "Backend returned an invalid JSON payload.",
+  }));
+
+  if (!response.ok) {
+    throw new Error(body.detail || body.error || "Model feedback failed.");
+  }
+
+  return body;
+}

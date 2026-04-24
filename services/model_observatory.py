@@ -89,6 +89,75 @@ def create_model_run(
         return int(cur.lastrowid)
 
 
+def create_model_feedback(
+    *,
+    task_id: int,
+    task_type: str,
+    provider: str,
+    model: str,
+    score: float,
+    confidence: str,
+    feedback: str,
+) -> int:
+    created_at = now_iso()
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO model_feedback (
+                task_id, task_type, provider, model, score, confidence, feedback, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(task_id),
+                str(task_type or "").strip(),
+                str(provider or "").strip(),
+                str(model or "").strip(),
+                float(score or 0.0),
+                str(confidence or "").strip(),
+                str(feedback or "").strip(),
+                created_at,
+            ),
+        )
+        return int(cur.lastrowid)
+
+
+def get_model_feedback(feedback_id: int) -> Optional[sqlite3.Row]:
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            SELECT *
+            FROM model_feedback
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (feedback_id,),
+        ).fetchone()
+
+
+def list_model_feedback(*, task_id: int | None = None, limit: int = 50) -> list[sqlite3.Row]:
+    where_clauses = ["1 = 1"]
+    params: list = []
+
+    if task_id is not None:
+        where_clauses.append("task_id = ?")
+        params.append(int(task_id))
+
+    params.append(int(limit))
+    with get_conn() as conn:
+        return conn.execute(
+            f"""
+            SELECT *
+            FROM model_feedback
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+
+
 def get_model_run(run_id: int) -> Optional[sqlite3.Row]:
     with get_conn() as conn:
         return conn.execute(
@@ -420,6 +489,14 @@ def delete_model_runs(run_ids: list[int]) -> None:
     placeholders = ", ".join(["?"] * len(run_ids))
     with get_conn() as conn:
         conn.execute(f"DELETE FROM model_runs WHERE id IN ({placeholders})", tuple(run_ids))
+
+
+def delete_model_feedback(feedback_ids: list[int]) -> None:
+    if not feedback_ids:
+        return
+    placeholders = ", ".join(["?"] * len(feedback_ids))
+    with get_conn() as conn:
+        conn.execute(f"DELETE FROM model_feedback WHERE id IN ({placeholders})", tuple(feedback_ids))
 
 
 def model_run_metadata(row) -> dict:

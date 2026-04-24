@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from backend.main import app
 from db import BASE_DIR
 from db import get_conn
-from services.model_observatory import find_task_execution_model_runs
+from services.model_observatory import find_task_execution_model_runs, list_model_feedback
 
 
 def ok(message: str) -> None:
@@ -31,6 +31,8 @@ def cleanup(asset_id: int | None, task_id: int | None) -> None:
             ).fetchall()
         if asset_id:
             conn.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
+        if task_id:
+            conn.execute("DELETE FROM model_feedback WHERE task_id = ?", (task_id,))
         if task_id:
             conn.execute("DELETE FROM model_runs WHERE task_id = ?", (task_id,))
         if task_id:
@@ -168,6 +170,30 @@ def main() -> int:
                 ok("task execution creates a related model_run in PWR-Core")
             else:
                 fail("task execution did not create the expected model_run")
+                failures += 1
+
+            feedback_response = client.post(
+                "/api/model-feedback",
+                json={
+                    "task_id": created_task_id,
+                    "task_type": created_task.get("task_type") or "generic",
+                    "provider": related_runs[0]["provider"] if related_runs else "gemini",
+                    "model": related_runs[0]["model"] if related_runs else "gemini-2.5-flash-lite",
+                    "score": 0.75,
+                    "confidence": "medium",
+                    "feedback": "useful",
+                },
+            )
+            feedback_rows = list_model_feedback(task_id=created_task_id, limit=10)
+            if (
+                feedback_response.status_code == 200
+                and feedback_response.json().get("feedback") == "useful"
+                and feedback_rows
+                and feedback_rows[0]["feedback"] == "useful"
+            ):
+                ok("model feedback endpoint persists hint feedback")
+            else:
+                fail("model feedback endpoint did not persist the expected feedback")
                 failures += 1
 
             create_asset_response = client.post(

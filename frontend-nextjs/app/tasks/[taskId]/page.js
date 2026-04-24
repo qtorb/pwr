@@ -4,6 +4,7 @@ import AppHeader from "../../_components/app-header";
 import { getTaskDetailData } from "../../../lib/pwr-api";
 import TaskAssetPanel from "./task-asset-panel";
 import TaskExecutionPanel from "./task-execution-panel";
+import TaskHintFeedback from "./task-hint-feedback";
 
 export const dynamic = "force-dynamic";
 
@@ -43,14 +44,6 @@ function stateCopy(state) {
   }[normalized] || normalized;
 }
 
-function confidenceCopy(value) {
-  return {
-    low: "baja",
-    medium: "media",
-    high: "alta",
-  }[String(value || "").toLowerCase()] || "desconocida";
-}
-
 function ExecutionHistory({ items }) {
   if (!items.length) {
     return <div className="muted-box">Sin ejecuciones todavia.</div>;
@@ -73,23 +66,6 @@ function ExecutionHistory({ items }) {
         </div>
       ))}
     </div>
-  );
-}
-
-function RecommendationHint({ recommendation }) {
-  if (!recommendation) return null;
-
-  return (
-    <section className="hint-callout">
-      <div className="hint-label">Hint experimental</div>
-      <div className="hint-title">{recommendation.model || "Modelo sugerido"}</div>
-      <div className="hint-meta">
-        <span>Confianza {confidenceCopy(recommendation.confidence)}</span>
-        <span>{recommendation.total_runs || 0} ejecuciones observadas</span>
-        {recommendation.provider ? <span>{recommendation.provider}</span> : null}
-      </div>
-      {recommendation.reason ? <div className="subtle">{recommendation.reason}</div> : null}
-    </section>
   );
 }
 
@@ -219,7 +195,11 @@ export default async function TaskDetailPage({ params, searchParams }) {
           <div className="subtle">API base actual: {apiBaseUrl}</div>
         </section>
 
-        <RecommendationHint recommendation={recommendation} />
+        <TaskHintFeedback
+          taskId={task.id}
+          taskType={task.task_type || "generic"}
+          recommendation={recommendation}
+        />
 
         {errors.length ? (
           <section className="panel">

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from typing import Literal
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -10,8 +11,10 @@ from db import init_db
 from services.assets import build_asset_reuse_payload, get_asset, get_project_assets, create_asset
 from services.executions import execute_task_now, get_execution_history, get_latest_execution_run
 from services.model_observatory import (
+    create_model_feedback,
     create_model_run,
     get_best_model_hint,
+    get_model_feedback,
     get_model_run,
     get_model_run_summary,
     list_model_runs,
@@ -149,6 +152,16 @@ class CreateModelRunRequest(BaseModel):
     converted_to_asset: bool = False
     reused_later: bool = False
     metadata_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class CreateModelFeedbackRequest(BaseModel):
+    task_id: int
+    task_type: str = "generic"
+    provider: str = Field(..., min_length=1)
+    model: str = Field(..., min_length=1)
+    score: float = 0.0
+    confidence: str = ""
+    feedback: Literal["useful", "not_useful", "used_other"]
 
 
 @asynccontextmanager
@@ -292,6 +305,24 @@ def model_runs_create(payload: CreateModelRunRequest) -> dict[str, Any]:
     if not run:
         raise HTTPException(status_code=500, detail="Model run was created but could not be read back")
     return row_to_dict(run)
+
+
+@app.post("/api/model-feedback")
+def model_feedback_create(payload: CreateModelFeedbackRequest) -> dict[str, Any]:
+    require_task(payload.task_id)
+    feedback_id = create_model_feedback(
+        task_id=payload.task_id,
+        task_type=payload.task_type,
+        provider=payload.provider,
+        model=payload.model,
+        score=payload.score,
+        confidence=payload.confidence,
+        feedback=payload.feedback,
+    )
+    feedback = get_model_feedback(feedback_id)
+    if not feedback:
+        raise HTTPException(status_code=500, detail="Model feedback was created but could not be read back")
+    return row_to_dict(feedback)
 
 
 @app.get("/api/projects/{project_id}")
