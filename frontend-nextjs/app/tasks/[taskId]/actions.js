@@ -8,6 +8,7 @@ export async function executeTaskAction(taskId) {
     cache: "no-store",
     headers: {
       Accept: "application/json",
+      "X-PWR-Source-App": "PWR-Web",
     },
   });
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from db import init_db
@@ -14,6 +14,9 @@ from services.model_observatory import (
     get_model_run,
     get_model_run_summary,
     list_model_runs,
+    mark_task_execution_runs_converted_to_asset,
+    mark_task_execution_runs_reused_later,
+    register_task_execution_model_run,
 )
 from services.projects import get_project, get_projects
 from services.tasks import (
@@ -62,6 +65,52 @@ def require_asset(asset_id: int):
     if not asset:
         raise HTTPException(status_code=404, detail=f"Asset {asset_id} not found")
     return asset
+
+
+def resolve_source_app(request: Request) -> str:
+    raw = str(request.headers.get("X-PWR-Source-App", "") or "").strip().lower()
+    if raw in {"pwr-web", "pwr_web", "nextjs", "next-js"}:
+        return "PWR-Web"
+    return "PWR-Core"
+
+
+def safe_track_task_execution_run(task_id: int, source_app: str) -> None:
+    task = get_task(task_id)
+    latest_run = get_latest_execution_run(task_id)
+    if not task or not latest_run:
+        return
+
+    metadata_json = {
+        "execution_id": int(latest_run["id"]),
+        "fallback": str(latest_run["error_code"] or "").strip().lower() == "provider_not_available",
+    }
+    register_task_execution_model_run(
+        source_app=source_app,
+        project_id=int(task["project_id"]) if task["project_id"] is not None else None,
+        task_id=int(task["id"]),
+        execution_id=int(latest_run["id"]),
+        task_type=str(task["task_type"] or "generic"),
+        provider=str(latest_run["provider"] or ""),
+        model=str(latest_run["model"] or ""),
+        status=str(latest_run["execution_status"] or ""),
+        latency_ms=int(latest_run["latency_ms"] or 0),
+        input_tokens=0,
+        output_tokens=0,
+        cost_usd=float(latest_run["estimated_cost"] or 0.0),
+        metadata_json=metadata_json,
+    )
+
+
+def safe_mark_asset_converted(task_id: int | None, execution_id: int | None) -> None:
+    if task_id is None:
+        return
+    mark_task_execution_runs_converted_to_asset(int(task_id), execution_id=int(execution_id) if execution_id else None)
+
+
+def safe_mark_asset_reused(task_id: int | None, execution_id: int | None) -> None:
+    if task_id is None:
+        return
+    mark_task_execution_runs_reused_later(int(task_id), execution_id=int(execution_id) if execution_id else None)
 
 
 class CreateTaskRequest(BaseModel):
@@ -270,14 +319,21 @@ def task_detail(task_id: int) -> dict[str, Any]:
 
 
 @app.post("/api/tasks/{task_id}/execute")
-def task_execute(task_id: int) -> dict[str, Any]:
+def task_execute(task_id: int, request: Request) -> dict[str, Any]:
     require_task(task_id)
     try:
-        return execute_task_now(task_id)
+        payload = execute_task_now(task_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Task execution failed: {exc}") from exc
+
+    try:
+        safe_track_task_execution_run(task_id, resolve_source_app(request))
+    except Exception:
+        pass
+
+    return payload
 
 
 @app.get("/api/tasks/{task_id}/executions")
@@ -320,6 +376,12 @@ def project_create_asset(project_id: int, payload: CreateAssetRequest) -> dict[s
         source_execution_id=payload.source_execution_id,
         source_execution_status=payload.source_execution_status,
     )
+
+    try:
+        safe_mark_asset_converted(payload.task_id, payload.source_execution_id)
+    except Exception:
+        pass
+
     return row_to_dict(require_asset(asset_id))
 
 
@@ -331,4 +393,10 @@ def asset_detail(asset_id: int) -> dict[str, Any]:
 @app.post("/api/assets/{asset_id}/reuse")
 def asset_reuse(asset_id: int) -> dict[str, Any]:
     asset = require_asset(asset_id)
+
+    try:
+        safe_mark_asset_reused(asset["task_id"], asset["source_execution_id"])
+    except Exception:
+        pass
+
     return build_asset_reuse_payload(asset)

@@ -17,6 +17,8 @@ import urllib.request
 from contextlib import suppress
 from pathlib import Path
 
+from services.model_observatory import find_task_execution_model_runs
+
 
 ROOT = Path(__file__).resolve().parent
 FRONTEND_DIR = ROOT / "frontend-nextjs"
@@ -74,14 +76,19 @@ def wait_for_http(url: str, expected_status: int = 200, timeout: float = 25.0) -
     return body
 
 
-def request_json(url: str, method: str = "GET", payload: dict | None = None) -> dict:
+def request_json(
+    url: str,
+    method: str = "GET",
+    payload: dict | None = None,
+    headers: dict | None = None,
+) -> dict:
     data = None
-    headers = {"Accept": "application/json"}
+    request_headers = {"Accept": "application/json", **(headers or {})}
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
+        request_headers["Content-Type"] = "application/json"
 
-    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    request = urllib.request.Request(url, data=data, headers=request_headers, method=method)
     with urllib.request.urlopen(request, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -295,7 +302,11 @@ def main() -> int:
             fail("task readonly route is missing expected content")
             failures += 1
 
-        execute_payload = request_json(f"{backend_base}/api/tasks/{controlled_task_id}/execute", method="POST")
+        execute_payload = request_json(
+            f"{backend_base}/api/tasks/{controlled_task_id}/execute",
+            method="POST",
+            headers={"X-PWR-Source-App": "PWR-Web"},
+        )
         next_state = str(execute_payload.get("status") or "").lower()
         if next_state in {"preview", "failed", "executed"} and execute_payload.get("execution_id"):
             ok(f"task execute route updates status={next_state} for task_id={controlled_task_id}")
@@ -309,6 +320,20 @@ def main() -> int:
             ok(f"backend reflects updated task state={next_state}")
         else:
             fail("backend state did not update after task execution")
+            failures += 1
+
+        related_runs = find_task_execution_model_runs(
+            controlled_task_id,
+            execution_id=latest_run.get("id") if latest_run else None,
+        )
+        if (
+            related_runs
+            and related_runs[0]["source_app"] == "PWR-Web"
+            and str(related_runs[0]["status"] or "").lower() == next_state
+        ):
+            ok("task execution from the web flow creates a model_run")
+        else:
+            fail("web execution did not create the expected model_run")
             failures += 1
 
         updated_task_html = wait_for_http(
@@ -359,6 +384,16 @@ def main() -> int:
             fail("asset creation did not persist the expected task linkage")
             failures += 1
 
+        related_runs_after_asset = find_task_execution_model_runs(
+            controlled_task_id,
+            execution_id=latest_run.get("id") if latest_run else None,
+        )
+        if related_runs_after_asset and int(related_runs_after_asset[0]["converted_to_asset"] or 0) == 1:
+            ok("asset save marks the related model_run as converted_to_asset")
+        else:
+            fail("asset save did not mark converted_to_asset on the related model_run")
+            failures += 1
+
         project_html_after_asset = wait_for_http(f"{frontend_base}/projects/{project_id}", timeout=60.0)
         if asset_title in project_html_after_asset and "Activos relacionados" in project_html_after_asset:
             ok(f"project route shows the saved asset for project_id={project_id}")
@@ -388,6 +423,16 @@ def main() -> int:
             ok(f"asset reuse flow created and opened task_id={reused_task_id}")
         else:
             fail("asset reuse flow did not open the expected prefilled task")
+            failures += 1
+
+        related_runs_after_reuse = find_task_execution_model_runs(
+            controlled_task_id,
+            execution_id=latest_run.get("id") if latest_run else None,
+        )
+        if related_runs_after_reuse and int(related_runs_after_reuse[0]["reused_later"] or 0) == 1:
+            ok("asset reuse marks the related model_run as reused_later")
+        else:
+            fail("asset reuse did not mark reused_later on the related model_run")
             failures += 1
 
     except Exception as exc:

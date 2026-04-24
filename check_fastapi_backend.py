@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from backend.main import app
 from db import BASE_DIR
 from db import get_conn
+from services.model_observatory import find_task_execution_model_runs
 
 
 def ok(message: str) -> None:
@@ -30,6 +31,8 @@ def cleanup(asset_id: int | None, task_id: int | None) -> None:
             ).fetchall()
         if asset_id:
             conn.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
+        if task_id:
+            conn.execute("DELETE FROM model_runs WHERE task_id = ?", (task_id,))
         if task_id:
             conn.execute("DELETE FROM executions_history WHERE task_id = ?", (task_id,))
         if task_id:
@@ -152,6 +155,19 @@ def main() -> int:
 
             latest_execution_item = latest_after_execute.json().get("item") or {}
             task_after_execute_payload = task_after_execute.json()
+            related_runs = find_task_execution_model_runs(
+                created_task_id,
+                execution_id=latest_execution_item.get("id"),
+            )
+            if (
+                related_runs
+                and related_runs[0]["source_app"] == "PWR-Core"
+                and related_runs[0]["status"] == task_after_execute_payload["execution_status"]
+            ):
+                ok("task execution creates a related model_run in PWR-Core")
+            else:
+                fail("task execution did not create the expected model_run")
+                failures += 1
 
             create_asset_response = client.post(
                 f"/api/projects/{project_id}/assets",
@@ -188,6 +204,15 @@ def main() -> int:
             asset_detail_response = client.get(f"/api/assets/{created_asset_id}")
             project_assets_response = client.get(f"/api/projects/{project_id}/assets")
             asset_reuse_response = client.post(f"/api/assets/{created_asset_id}/reuse")
+            related_runs_after_asset = find_task_execution_model_runs(
+                created_task_id,
+                execution_id=latest_execution_item.get("id"),
+            )
+            if related_runs_after_asset and int(related_runs_after_asset[0]["converted_to_asset"] or 0) == 1:
+                ok("asset creation marks the related model_run as converted_to_asset")
+            else:
+                fail("asset creation did not mark converted_to_asset on the related model_run")
+                failures += 1
             if (
                 asset_detail_response.status_code == 200
                 and project_assets_response.status_code == 200
@@ -203,6 +228,16 @@ def main() -> int:
                 ok("asset reuse payload is complete over HTTP")
             else:
                 fail("asset reuse payload is incomplete over HTTP")
+                failures += 1
+
+            related_runs_after_reuse = find_task_execution_model_runs(
+                created_task_id,
+                execution_id=latest_execution_item.get("id"),
+            )
+            if related_runs_after_reuse and int(related_runs_after_reuse[0]["reused_later"] or 0) == 1:
+                ok("asset reuse marks the related model_run as reused_later")
+            else:
+                fail("asset reuse did not mark reused_later on the related model_run")
                 failures += 1
 
     except Exception as exc:

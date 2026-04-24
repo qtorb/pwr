@@ -4,7 +4,7 @@ import json
 import sqlite3
 from typing import Optional
 
-from db import get_conn, now_iso
+from db import get_conn, now_iso, row_value, safe_json_loads
 
 
 def create_model_run(
@@ -167,3 +167,104 @@ def delete_model_runs(run_ids: list[int]) -> None:
     placeholders = ", ".join(["?"] * len(run_ids))
     with get_conn() as conn:
         conn.execute(f"DELETE FROM model_runs WHERE id IN ({placeholders})", tuple(run_ids))
+
+
+def model_run_metadata(row) -> dict:
+    return safe_json_loads(row_value(row, "metadata_json"), {})
+
+
+def find_task_execution_model_runs(task_id: int, execution_id: int | None = None) -> list[sqlite3.Row]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM model_runs
+            WHERE task_id = ? AND workflow = 'task_execution'
+            ORDER BY created_at DESC, id DESC
+            """,
+            (task_id,),
+        ).fetchall()
+
+    if execution_id is None:
+        return rows
+
+    expected = int(execution_id or 0)
+    return [
+        row
+        for row in rows
+        if int(model_run_metadata(row).get("execution_id") or 0) == expected
+    ]
+
+
+def register_task_execution_model_run(
+    *,
+    source_app: str,
+    project_id: int | None,
+    task_id: int,
+    execution_id: int,
+    task_type: str,
+    provider: str,
+    model: str,
+    status: str,
+    latency_ms: int = 0,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cost_usd: float = 0.0,
+    metadata_json: Optional[dict] = None,
+) -> int | None:
+    existing = find_task_execution_model_runs(task_id, execution_id=execution_id)
+    if existing:
+        return int(row_value(existing[0], "id", 0) or 0) or None
+
+    payload = dict(metadata_json or {})
+    payload["execution_id"] = execution_id
+
+    return create_model_run(
+        source_app=source_app or "PWR-Core",
+        project_id=project_id,
+        task_id=task_id,
+        workflow="task_execution",
+        task_type=(task_type or "generic").strip() or "generic",
+        agent_role="executor",
+        provider=(provider or "unknown").strip() or "unknown",
+        model=(model or "unknown").strip() or "unknown",
+        status=(status or "failed").strip() or "failed",
+        latency_ms=latency_ms,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=cost_usd,
+        quality_rating=None,
+        converted_to_asset=False,
+        reused_later=False,
+        metadata_json=payload,
+    )
+
+
+def mark_task_execution_runs_converted_to_asset(task_id: int, execution_id: int | None = None) -> list[int]:
+    rows = find_task_execution_model_runs(task_id, execution_id=execution_id)
+    run_ids = [int(row_value(row, "id", 0) or 0) for row in rows if int(row_value(row, "id", 0) or 0) > 0]
+    if not run_ids:
+        return []
+
+    placeholders = ", ".join(["?"] * len(run_ids))
+    with get_conn() as conn:
+        conn.execute(
+            f"UPDATE model_runs SET converted_to_asset = 1 WHERE id IN ({placeholders})",
+            tuple(run_ids),
+        )
+    return run_ids
+
+
+def mark_task_execution_runs_reused_later(task_id: int, execution_id: int | None = None) -> list[int]:
+    rows = find_task_execution_model_runs(task_id, execution_id=execution_id)
+    run_ids = [int(row_value(row, "id", 0) or 0) for row in rows if int(row_value(row, "id", 0) or 0) > 0]
+    if not run_ids:
+        return []
+
+    placeholders = ", ".join(["?"] * len(run_ids))
+    with get_conn() as conn:
+        conn.execute(
+            f"UPDATE model_runs SET reused_later = 1 WHERE id IN ({placeholders})",
+            tuple(run_ids),
+        )
+    return run_ids
