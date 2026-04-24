@@ -202,6 +202,50 @@ def get_model_run_summary(
     return summary
 
 
+def get_best_model_hint(
+    *,
+    task_type: str = "generic",
+    source_app: str = "",
+    workflow: str = "",
+) -> dict | None:
+    normalized_task_type = str(task_type or "generic").strip() or "generic"
+    summary = get_model_run_summary(limit=500, source_app=source_app, workflow=workflow)
+    candidates = [
+        row
+        for row in summary
+        if str(row.get("task_type") or "").strip() == normalized_task_type
+        and int(row.get("total_runs") or 0) > 0
+    ]
+    if not candidates:
+        return None
+
+    def score(row: dict) -> float:
+        return round(
+            (float(row.get("conversion_rate") or 0.0) * 0.6)
+            + (float(row.get("reuse_rate") or 0.0) * 0.4),
+            4,
+        )
+
+    ordered = sorted(
+        candidates,
+        key=lambda row: (
+            score(row),
+            float(row.get("success_rate") or 0.0),
+            int(row.get("total_runs") or 0),
+        ),
+        reverse=True,
+    )
+    best = ordered[0]
+
+    return {
+        "provider": best.get("provider"),
+        "model": best.get("model"),
+        "task_type": best.get("task_type"),
+        "score": score(best),
+        "reason": "high conversion and reuse rates",
+    }
+
+
 def delete_model_runs(run_ids: list[int]) -> None:
     if not run_ids:
         return

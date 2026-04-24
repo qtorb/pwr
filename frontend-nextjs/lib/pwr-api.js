@@ -66,22 +66,27 @@ export async function getProjectWorkspaceData(projectId) {
 }
 
 export async function getTaskDetailData(taskId) {
-  const [task, latestExecution, executions] = await Promise.allSettled([
-    fetchJson(`/api/tasks/${taskId}`),
+  const task = await Promise.allSettled([fetchJson(`/api/tasks/${taskId}`)]).then((results) => results[0]);
+  const taskError = task.status === "rejected" ? task.reason?.message || "Unknown API error" : "";
+  const taskPayload = task.status === "fulfilled" ? task.value : null;
+  const taskType = encodeURIComponent(taskPayload?.task_type || "generic");
+
+  const [latestExecution, executions, recommendation] = await Promise.allSettled([
     fetchJson(`/api/tasks/${taskId}/executions/latest`),
     fetchJson(`/api/tasks/${taskId}/executions`),
+    fetchJson(`/api/model-runs/best?task_type=${taskType}`),
   ]);
-
-  const taskError = task.status === "rejected" ? task.reason?.message || "Unknown API error" : "";
 
   return {
     apiBaseUrl: DEFAULT_API_BASE_URL,
-    task: task.status === "fulfilled" ? task.value : null,
+    task: taskPayload,
     latestExecution:
       latestExecution.status === "fulfilled" ? latestExecution.value.item || null : null,
     executions: executions.status === "fulfilled" ? executions.value.items : [],
+    recommendation:
+      recommendation.status === "fulfilled" ? recommendation.value.recommended || null : null,
     missing: taskError.includes(": 404"),
-    errors: [task, latestExecution, executions]
+    errors: [task, latestExecution, executions, recommendation]
       .filter((result) => result.status === "rejected")
       .map((result) => result.reason?.message || "Unknown API error"),
   };

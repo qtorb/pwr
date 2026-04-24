@@ -93,7 +93,8 @@ def main() -> int:
 
             home_activity = client.get("/api/home/activity", params={"limit": 3})
             home_reentry = client.get("/api/home/reentry", params={"limit": 3})
-            if home_activity.status_code == 200 and home_reentry.status_code == 200:
+            best_model_hint = client.get("/api/model-runs/best", params={"task_type": "Pensar"})
+            if home_activity.status_code == 200 and home_reentry.status_code == 200 and best_model_hint.status_code == 200:
                 ok("home activity and reentry endpoints respond")
             else:
                 fail("home endpoints failed")
@@ -238,6 +239,13 @@ def main() -> int:
                 ok("asset reuse marks the related model_run as reused_later")
             else:
                 fail("asset reuse did not mark reused_later on the related model_run")
+                failures += 1
+
+            best_payload = client.get("/api/model-runs/best", params={"task_type": "Pensar"}).json()
+            if best_payload.get("recommended") and best_payload["recommended"].get("model"):
+                ok("best model hint endpoint returns a recommendation")
+            else:
+                fail("best model hint endpoint did not return a recommendation")
                 failures += 1
 
     except Exception as exc:

@@ -210,6 +210,24 @@ def main() -> int:
                     )
                     failures += 1
 
+            best_response = client.get("/api/model-runs/best", params={"task_type": "briefing"})
+            if best_response.status_code != 200:
+                fail("best model hint endpoint failed")
+                return 1
+
+            recommended = best_response.json().get("recommended")
+            if (
+                recommended
+                and recommended.get("provider") == "gemini"
+                and recommended.get("model") == "gemini-2.5-pro"
+                and recommended.get("task_type") == "briefing"
+                and abs(float(recommended.get("score") or 0.0) - 0.5333) <= 0.0002
+            ):
+                ok("best model hint returns the expected recommendation")
+            else:
+                fail("best model hint did not return the expected recommendation")
+                failures += 1
+
     except Exception as exc:
         fail(f"unexpected error: {type(exc).__name__}: {exc}")
         failures += 1

@@ -11,6 +11,7 @@ from services.assets import build_asset_reuse_payload, get_asset, get_project_as
 from services.executions import execute_task_now, get_execution_history, get_latest_execution_run
 from services.model_observatory import (
     create_model_run,
+    get_best_model_hint,
     get_model_run,
     get_model_run_summary,
     list_model_runs,
@@ -225,6 +226,13 @@ def model_runs_summary(
         "summary": summary,
         "items": summary,
         "total_runs": sum(int(item.get("total_runs", 0) or 0) for item in summary),
+    }
+
+
+@app.get("/api/model-runs/best")
+def model_runs_best(task_type: str = "generic") -> dict[str, Any]:
+    return {
+        "recommended": get_best_model_hint(task_type=task_type or "generic"),
     }
 
 

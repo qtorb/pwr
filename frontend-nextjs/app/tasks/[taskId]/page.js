@@ -106,7 +106,7 @@ function OutputPanel({ task, latestExecution }) {
 export default async function TaskDetailPage({ params, searchParams }) {
   const { taskId } = await params;
   const resolvedSearchParams = (await searchParams) || {};
-  const { apiBaseUrl, task, latestExecution, executions, errors, missing } = await getTaskDetailData(taskId);
+  const { apiBaseUrl, task, latestExecution, executions, recommendation, errors, missing } = await getTaskDetailData(taskId);
 
   if (!task) {
     return (
@@ -195,6 +195,12 @@ export default async function TaskDetailPage({ params, searchParams }) {
           <p>Vista readonly de tarea compuesta desde FastAPI sin cambiar Streamlit.</p>
           <div className="subtle">API base actual: {apiBaseUrl}</div>
         </section>
+
+        {recommendation ? (
+          <section className="feedback-banner">
+            Modelo recomendado: {recommendation.model}
+          </section>
+        ) : null}
 
         {errors.length ? (
           <section className="panel">
