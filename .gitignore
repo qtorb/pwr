@@ -5,3 +5,5 @@ pwr_data/pwr.db
 pwr_data/portable_runs/
 pwr_data/reusable_assets/
 router/__pycache__/
+frontend-nextjs/node_modules/
+frontend-nextjs/.next/
