@@ -76,6 +76,11 @@ function AssetList({ items }) {
             <span>{formatDate(asset.updated_at || asset.created_at)}</span>
           </div>
           <div className="subtle">{asset.summary || "Sin resumen visible para este activo."}</div>
+          <div>
+            <Link className="inline-link" href={`/projects/${asset.project_id}/assets/${asset.id}/reuse`}>
+              Usar como base
+            </Link>
+          </div>
         </div>
       ))}
     </div>

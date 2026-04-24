@@ -51,7 +51,7 @@ def free_port(start: int, end: int) -> int:
     raise RuntimeError(f"No free port found between {start} and {end}")
 
 
-def wait_for_http(url: str, expected_status: int = 200, timeout: float = 25.0) -> str:
+def wait_for_http_response(url: str, expected_status: int = 200, timeout: float = 25.0) -> tuple[str, str]:
     deadline = time.time() + timeout
     last_error = "unknown error"
     while time.time() < deadline:
@@ -59,7 +59,7 @@ def wait_for_http(url: str, expected_status: int = 200, timeout: float = 25.0) -
             with urllib.request.urlopen(url, timeout=3) as response:
                 body = response.read().decode("utf-8", errors="replace")
                 if response.status == expected_status:
-                    return body
+                    return body, response.geturl()
                 last_error = f"unexpected status {response.status}"
         except urllib.error.HTTPError as exc:
             last_error = f"http {exc.code}"
@@ -67,6 +67,11 @@ def wait_for_http(url: str, expected_status: int = 200, timeout: float = 25.0) -
             last_error = str(exc)
         time.sleep(0.5)
     raise RuntimeError(f"{url} did not become ready: {last_error}")
+
+
+def wait_for_http(url: str, expected_status: int = 200, timeout: float = 25.0) -> str:
+    body, _ = wait_for_http_response(url, expected_status=expected_status, timeout=timeout)
+    return body
 
 
 def request_json(url: str, method: str = "GET", payload: dict | None = None) -> dict:
@@ -142,6 +147,7 @@ def main() -> int:
     backend_proc: subprocess.Popen | None = None
     frontend_proc: subprocess.Popen | None = None
     controlled_task_id: int | None = None
+    reused_task_id: int | None = None
     temp_log_file = tempfile.NamedTemporaryFile(
         prefix="pwr-nextjs-route-smoke-",
         suffix=".log",
@@ -360,10 +366,35 @@ def main() -> int:
             fail("project route did not show the saved asset")
             failures += 1
 
+        if "Usar como base" in project_html_after_asset:
+            ok("project route exposes the asset reuse action")
+        else:
+            fail("project route is missing the asset reuse action")
+            failures += 1
+
+        reused_task_html, reused_task_url = wait_for_http_response(
+            f"{frontend_base}/projects/{project_id}/assets/{created_asset['id']}/reuse",
+            timeout=60.0,
+        )
+        task_marker = "/tasks/"
+        if task_marker in reused_task_url:
+            reused_task_id = int(reused_task_url.split(task_marker, 1)[1].split("?", 1)[0].split("/", 1)[0])
+        if (
+            reused_task_id
+            and "Tarea creada desde un activo reutilizable" in reused_task_html
+            and asset_title in reused_task_html
+            and "[ACTIVO REUTILIZADO" in reused_task_html
+        ):
+            ok(f"asset reuse flow created and opened task_id={reused_task_id}")
+        else:
+            fail("asset reuse flow did not open the expected prefilled task")
+            failures += 1
+
     except Exception as exc:
         fail(f"unexpected error: {type(exc).__name__}: {exc}")
         failures += 1
     finally:
+        cleanup_controlled_task(reused_task_id)
         cleanup_controlled_task(controlled_task_id)
         terminate_process_tree(frontend_proc)
         terminate_process_tree(backend_proc)

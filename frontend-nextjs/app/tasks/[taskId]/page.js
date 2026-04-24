@@ -161,6 +161,7 @@ export default async function TaskDetailPage({ params, searchParams }) {
 
   const taskState = latestExecution?.execution_status || task.execution_status || task.status || "pending";
   const updatedState = resolvedSearchParams.updated === "1" ? resolvedSearchParams.status || "" : "";
+  const fromAsset = resolvedSearchParams.fromAsset === "1";
   const resultContent = String(latestExecution?.output_text || task.llm_output || "").trim();
   const briefingContent = String(task.context || task.description || task.router_summary || "").trim();
   const canSaveAsset = ["preview", "executed"].includes(String(taskState).toLowerCase()) && Boolean(resultContent || briefingContent);
@@ -211,6 +212,12 @@ export default async function TaskDetailPage({ params, searchParams }) {
         {updatedState ? (
           <section className="feedback-banner ok">
             Actualizado. Estado actual: {stateCopy(updatedState)}.
+          </section>
+        ) : null}
+
+        {fromAsset ? (
+          <section className="feedback-banner ok">
+            Tarea creada desde un activo reutilizable. El titulo y el contexto ya llegaron prellenados.
           </section>
         ) : null}
 

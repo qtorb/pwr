@@ -1,10 +1,12 @@
 const DEFAULT_API_BASE_URL = process.env.PWR_API_BASE_URL || "http://127.0.0.1:8000";
 
-export async function fetchJson(path) {
+export async function fetchJson(path, options = {}) {
   const response = await fetch(`${DEFAULT_API_BASE_URL}${path}`, {
+    ...options,
     cache: "no-store",
     headers: {
       Accept: "application/json",
+      ...(options.headers || {}),
     },
   });
 
@@ -13,6 +15,16 @@ export async function fetchJson(path) {
   }
 
   return response.json();
+}
+
+export async function postJson(path, payload) {
+  return fetchJson(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function getShellHomeData() {
@@ -72,5 +84,20 @@ export async function getTaskDetailData(taskId) {
     errors: [task, latestExecution, executions]
       .filter((result) => result.status === "rejected")
       .map((result) => result.reason?.message || "Unknown API error"),
+  };
+}
+
+export async function reuseAssetToTask(projectId, assetId) {
+  const reusePayload = await postJson(`/api/assets/${assetId}/reuse`, {});
+  const createdTask = await postJson(`/api/projects/${projectId}/tasks`, {
+    title: reusePayload.title || "Nueva tarea",
+    description: reusePayload.notice || "",
+    task_type: "Pensar",
+    context: reusePayload.context || "",
+  });
+
+  return {
+    reusePayload,
+    createdTask,
   };
 }
