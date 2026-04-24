@@ -12,7 +12,8 @@ COPY db.py ./db.py
 COPY state_contract.py ./state_contract.py
 COPY pwr_data ./pwr_data
 
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    PWR_DATA_DIR=/data/pwr_data
 
 EXPOSE 8000
 
