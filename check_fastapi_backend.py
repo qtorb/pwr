@@ -251,7 +251,9 @@ def main() -> int:
                 and isinstance(recommended.get("quality_score"), (int, float))
                 and isinstance(recommended.get("cost_efficiency"), (int, float))
                 and isinstance(recommended.get("latency_efficiency"), (int, float))
+                and isinstance(recommended.get("reliability_score"), (int, float))
                 and "quality=" in str(recommended.get("reason") or "")
+                and "reliability=" in str(recommended.get("reason") or "")
                 and "recent_weighting=" in str(recommended.get("reason") or "")
             ):
                 ok("best model hint endpoint returns a recommendation")

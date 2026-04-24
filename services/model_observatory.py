@@ -8,6 +8,29 @@ from typing import Optional
 from db import get_conn, now_iso, row_value, safe_json_loads
 
 
+def clamp01(value: float) -> float:
+    return round(min(max(float(value), 0.0), 1.0), 4)
+
+
+def compute_reliability_score(row: dict) -> float:
+    try:
+        success_rate = row.get("success_rate")
+        preview_rate = row.get("preview_rate")
+        failed_rate = row.get("failed_rate")
+        if success_rate is None or preview_rate is None or failed_rate is None:
+            return 1.0
+
+        raw_score = (
+            float(success_rate) * 1.0
+            + float(preview_rate) * 0.4
+            - float(failed_rate) * 0.8
+        )
+    except (TypeError, ValueError):
+        return 1.0
+
+    return clamp01(raw_score)
+
+
 def create_model_run(
     *,
     source_app: str,
@@ -301,7 +324,7 @@ def get_best_model_hint(
     min_cost = min(valid_costs) if valid_costs else None
     min_latency = min(valid_latencies) if valid_latencies else None
 
-    def candidate_metrics(row: dict) -> tuple[float, float, float, bool]:
+    def candidate_metrics(row: dict) -> tuple[float, float, float, float, bool]:
         key = (
             str(row.get("provider") or "").strip(),
             str(row.get("model") or "").strip(),
@@ -320,6 +343,7 @@ def get_best_model_hint(
             weighting_enabled = False
 
         quality_score = round((conversion_rate * 0.6) + (reuse_rate * 0.4), 4)
+        reliability_score = compute_reliability_score(row)
 
         cost_value = positive_metric(row, "avg_cost_usd")
         latency_value = positive_metric(row, "avg_latency_ms")
@@ -328,17 +352,18 @@ def get_best_model_hint(
             1.0 if min_latency is None or latency_value is None else round(min_latency / latency_value, 4)
         )
 
-        cost_efficiency = round(min(max(cost_efficiency, 0.0), 1.0), 4)
-        latency_efficiency = round(min(max(latency_efficiency, 0.0), 1.0), 4)
+        cost_efficiency = clamp01(cost_efficiency)
+        latency_efficiency = clamp01(latency_efficiency)
 
-        return quality_score, cost_efficiency, latency_efficiency, weighting_enabled
+        return quality_score, cost_efficiency, latency_efficiency, reliability_score, weighting_enabled
 
     def score(row: dict) -> float:
-        quality_score, cost_efficiency, latency_efficiency, _ = candidate_metrics(row)
+        quality_score, cost_efficiency, latency_efficiency, reliability_score, _ = candidate_metrics(row)
         return round(
-            (quality_score * 0.75)
+            (quality_score * 0.65)
             + (cost_efficiency * 0.15)
-            + (latency_efficiency * 0.10),
+            + (latency_efficiency * 0.10)
+            + (reliability_score * 0.10),
             4,
         )
 
@@ -354,6 +379,7 @@ def get_best_model_hint(
         key=lambda row: (
             score(row),
             candidate_metrics(row)[0],
+            candidate_metrics(row)[3],
             float(row.get("success_rate") or 0.0),
             int(row.get("total_runs") or 0),
         ),
@@ -362,7 +388,7 @@ def get_best_model_hint(
     best = ordered[0]
     total_runs = int(best.get("total_runs") or 0)
     confidence = confidence_label(total_runs)
-    quality_score, cost_efficiency, latency_efficiency, weighting_enabled = candidate_metrics(best)
+    quality_score, cost_efficiency, latency_efficiency, reliability_score, weighting_enabled = candidate_metrics(best)
     weighting_state = "enabled" if weighting_enabled else "fallback"
 
     return {
@@ -373,12 +399,14 @@ def get_best_model_hint(
         "quality_score": quality_score,
         "cost_efficiency": cost_efficiency,
         "latency_efficiency": latency_efficiency,
+        "reliability_score": reliability_score,
         "total_runs": total_runs,
         "confidence": confidence,
         "reason": (
             f"quality={quality_score:.4f}, "
             f"cost_efficiency={cost_efficiency:.4f}, "
             f"latency_efficiency={latency_efficiency:.4f}, "
+            f"reliability={reliability_score:.4f}, "
             f"runs={total_runs}, "
             f"confidence={confidence}, "
             f"recent_weighting={weighting_state}"
