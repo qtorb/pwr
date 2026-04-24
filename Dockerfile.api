@@ -1,0 +1,19 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend ./backend
+COPY services ./services
+COPY router ./router
+COPY db.py ./db.py
+COPY state_contract.py ./state_contract.py
+COPY pwr_data ./pwr_data
+
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8000
+
+CMD exec uvicorn backend.main:app --host 0.0.0.0 --port=${PORT:-8000}
