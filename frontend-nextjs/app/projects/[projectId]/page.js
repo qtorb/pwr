@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import AppHeader from "../../_components/app-header";
 import { getProjectWorkspaceData } from "../../../lib/pwr-api";
+import TaskQuickCreatePanel from "../../tasks/task-quick-create-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -88,8 +89,9 @@ function AssetList({ items }) {
   );
 }
 
-export default async function ProjectWorkspacePage({ params }) {
+export default async function ProjectWorkspacePage({ params, searchParams }) {
   const { projectId } = await params;
+  const resolvedSearchParams = (await searchParams) || {};
   const { apiBaseUrl, project, tasks, assets, errors } = await getProjectWorkspaceData(projectId);
 
   if (!project) {
@@ -105,17 +107,23 @@ export default async function ProjectWorkspacePage({ params }) {
           <div className="breadcrumbs">
             <Link href="/">Home</Link>
             <span>/</span>
-            <Link href="/tasks">Tasks</Link>
+            <Link href="/projects">Projects</Link>
             <span>/</span>
             <span>{project.name}</span>
           </div>
           <h1>{project.name}</h1>
           <p>
-            Vista de proyecto en modo solo lectura. La shell ya deja ver contexto, tareas y activos con una
-            estructura mas calmada y apta para uso repetido.
+            El proyecto es el contenedor principal del trabajo. Desde aqui puedes leer contexto, revisar
+            tareas y arrancar nuevas tareas ya asociadas al proyecto correcto.
           </p>
           <div className="subtle">API base actual: {apiBaseUrl}</div>
         </section>
+
+        {resolvedSearchParams.created === "1" ? (
+          <section className="feedback-banner ok">
+            Proyecto creado. Ya puedes abrir su contexto y crear la primera tarea dentro de este workspace.
+          </section>
+        ) : null}
 
         {errors.length ? (
           <section className="panel">
@@ -171,11 +179,13 @@ export default async function ProjectWorkspacePage({ params }) {
           </div>
 
           <aside className="workspace-side">
+            <TaskQuickCreatePanel projects={[project]} fixedProject={project} />
+
             <div className="panel">
               <div className="panel-body">
                 <div className="band-head">
                   <h2>Resumen</h2>
-                  <div className="subtle">Proyecto readonly</div>
+                  <div className="subtle">Proyecto como entidad de primer nivel</div>
                 </div>
                 <div className="summary-grid">
                   <div className="summary-pill">
@@ -189,6 +199,10 @@ export default async function ProjectWorkspacePage({ params }) {
                   <div className="summary-pill">
                     <strong>{project.slug || "sin-slug"}</strong>
                     <span>Slug</span>
+                  </div>
+                  <div className="summary-pill">
+                    <strong>{formatDate(project.last_activity_at || project.updated_at || project.created_at)}</strong>
+                    <span>Ultima actividad</span>
                   </div>
                 </div>
               </div>

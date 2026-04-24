@@ -1,21 +1,25 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import { createTaskAction } from "./actions";
 
-export default function TaskQuickCreatePanel({ projects }) {
+export default function TaskQuickCreatePanel({ projects, fixedProject = null }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [projectId, setProjectId] = useState(String(projects[0]?.id || ""));
+  const [projectId, setProjectId] = useState(String(fixedProject?.id || projects[0]?.id || ""));
   const [title, setTitle] = useState("");
   const [context, setContext] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
   const projectOptions = useMemo(
-    () => projects.map((project) => ({ value: String(project.id), label: project.name })),
-    [projects],
+    () =>
+      fixedProject
+        ? [{ value: String(fixedProject.id), label: fixedProject.name }]
+        : projects.map((project) => ({ value: String(project.id), label: project.name })),
+    [fixedProject, projects],
   );
 
   function handleCreate() {
@@ -52,25 +56,32 @@ export default function TaskQuickCreatePanel({ projects }) {
       <div className="panel-body stack">
         <div className="band-head">
           <h2>Crear tarea</h2>
-          <div className="subtle">Inicio rapido</div>
+          <div className="subtle">{fixedProject ? "Dentro de este proyecto" : "Inicio rapido"}</div>
         </div>
 
         {projectOptions.length ? (
           <>
-            <div className="form-field">
-              <label htmlFor="quick-task-project">Proyecto</label>
-              <select
-                id="quick-task-project"
-                value={projectId}
-                onChange={(event) => setProjectId(event.target.value)}
-              >
-                {projectOptions.map((project) => (
-                  <option key={project.value} value={project.value}>
-                    {project.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {fixedProject ? (
+              <div className="info-block">
+                <div className="label">Proyecto</div>
+                <div>{fixedProject.name}</div>
+              </div>
+            ) : (
+              <div className="form-field">
+                <label htmlFor="quick-task-project">Proyecto</label>
+                <select
+                  id="quick-task-project"
+                  value={projectId}
+                  onChange={(event) => setProjectId(event.target.value)}
+                >
+                  {projectOptions.map((project) => (
+                    <option key={project.value} value={project.value}>
+                      {project.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="form-field">
               <label htmlFor="quick-task-title">Titulo</label>
@@ -100,12 +111,18 @@ export default function TaskQuickCreatePanel({ projects }) {
                 : "Se abrira el detalle de la tarea para ejecutarla o seguir trabajandola."}
             </div>
 
-            <button className="primary-button" type="button" onClick={handleCreate} disabled={isPending}>
-              {isPending ? "Creando..." : "Crear tarea"}
-            </button>
+        <button className="primary-button" type="button" onClick={handleCreate} disabled={isPending}>
+          {isPending ? "Creando..." : fixedProject ? "Crear tarea en este proyecto" : "Crear tarea"}
+        </button>
           </>
         ) : (
-          <div className="muted-box">Todavia no hay proyectos disponibles para crear tareas desde esta shell.</div>
+          <div className="muted-box">
+            Todavia no hay proyectos disponibles para crear tareas desde esta shell.{" "}
+            <Link className="inline-link" href="/projects">
+              Crea el primer proyecto
+            </Link>
+            .
+          </div>
         )}
 
         {errorMessage ? <div className="feedback-banner error">{errorMessage}</div> : null}

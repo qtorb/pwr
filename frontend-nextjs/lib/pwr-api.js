@@ -65,6 +65,48 @@ export async function getProjectWorkspaceData(projectId) {
   };
 }
 
+export async function getProjectsPageData() {
+  const [health, projects] = await Promise.allSettled([fetchJson("/health"), fetchJson("/api/projects")]);
+
+  return {
+    apiBaseUrl: DEFAULT_API_BASE_URL,
+    health: health.status === "fulfilled" ? health.value : null,
+    projects: projects.status === "fulfilled" ? projects.value.items : [],
+    errors: [health, projects]
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason?.message || "Unknown API error"),
+  };
+}
+
+export async function getTasksPageData(projectId = null) {
+  const params = new URLSearchParams({ limit: "100" });
+  if (projectId) {
+    params.set("project_id", String(projectId));
+  }
+
+  const [health, projects, tasks] = await Promise.allSettled([
+    fetchJson("/health"),
+    fetchJson("/api/projects"),
+    fetchJson(`/api/tasks?${params.toString()}`),
+  ]);
+
+  const projectItems = projects.status === "fulfilled" ? projects.value.items : [];
+  const selectedProject = projectId
+    ? projectItems.find((project) => String(project.id) === String(projectId)) || null
+    : null;
+
+  return {
+    apiBaseUrl: DEFAULT_API_BASE_URL,
+    health: health.status === "fulfilled" ? health.value : null,
+    projects: projectItems,
+    tasks: tasks.status === "fulfilled" ? tasks.value.items : [],
+    selectedProject,
+    errors: [health, projects, tasks]
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason?.message || "Unknown API error"),
+  };
+}
+
 export async function getTaskDetailData(taskId) {
   const task = await Promise.allSettled([fetchJson(`/api/tasks/${taskId}`)]).then((results) => results[0]);
   const taskError = task.status === "rejected" ? task.reason?.message || "Unknown API error" : "";
@@ -128,7 +170,8 @@ export async function getModelObservatorySummaryData() {
 
 export async function reuseAssetToTask(projectId, assetId) {
   const reusePayload = await postJson(`/api/assets/${assetId}/reuse`, {});
-  const createdTask = await postJson(`/api/projects/${projectId}/tasks`, {
+  const createdTask = await postJson("/api/tasks", {
+    project_id: Number(projectId),
     title: reusePayload.title || "Nueva tarea",
     description: reusePayload.notice || "",
     task_type: "Pensar",

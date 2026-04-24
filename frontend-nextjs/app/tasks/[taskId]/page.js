@@ -168,6 +168,7 @@ export default async function TaskDetailPage({ params, searchParams }) {
   const canSaveAsset =
     ["preview", "executed"].includes(String(taskState).toLowerCase()) && Boolean(resultContent || briefingContent);
   const defaultAssetType = String(taskState).toLowerCase() === "preview" ? "preview" : "output";
+  const projectLabel = task.project_name || `Proyecto ${task.project_id}`;
 
   return (
     <main className="shell">
@@ -178,9 +179,9 @@ export default async function TaskDetailPage({ params, searchParams }) {
           <div className="breadcrumbs">
             <Link href="/">Home</Link>
             <span>/</span>
-            <Link href="/tasks">Tasks</Link>
+            <Link href="/projects">Projects</Link>
             <span>/</span>
-            <Link href={`/projects/${task.project_id}`}>Proyecto {task.project_id}</Link>
+            <Link href={`/projects/${task.project_id}`}>{projectLabel}</Link>
             <span>/</span>
             <span>{task.title || `Tarea ${task.id}`}</span>
           </div>
@@ -239,7 +240,11 @@ export default async function TaskDetailPage({ params, searchParams }) {
                 <div className="stack">
                   <div className="info-block">
                     <div className="label">Proyecto</div>
-                    <div>Proyecto {task.project_id}</div>
+                    <div>{projectLabel}</div>
+                  </div>
+                  <div className="info-block">
+                    <div className="label">Contexto de proyecto</div>
+                    <div>{task.project_description || task.project_objective || "Sin descripcion visible para este proyecto."}</div>
                   </div>
                   <div className="info-block">
                     <div className="label">Task type</div>
@@ -342,11 +347,11 @@ export default async function TaskDetailPage({ params, searchParams }) {
                 <Link href={`/projects/${task.project_id}`} className="inline-link">
                   Volver al proyecto
                 </Link>
-                <Link href="/tasks" className="inline-link">
-                  Volver a Tasks
-                </Link>
                 <Link href="/" className="inline-link">
                   Volver a Home
+                </Link>
+                <Link href="/tasks" className="inline-link">
+                  Volver a Tasks
                 </Link>
               </div>
             </div>

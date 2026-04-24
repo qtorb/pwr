@@ -121,6 +121,14 @@ def cleanup_controlled_task(task_id: int | None) -> None:
                     artifact_path.unlink()
 
 
+def cleanup_controlled_project(project_id: int | None) -> None:
+    if not project_id:
+        return
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        conn.commit()
+
+
 def terminate_process_tree(proc: subprocess.Popen | None) -> None:
     if not proc:
         return
@@ -154,6 +162,7 @@ def main() -> int:
     failures = 0
     backend_proc: subprocess.Popen | None = None
     frontend_proc: subprocess.Popen | None = None
+    controlled_project_id: int | None = None
     controlled_task_id: int | None = None
     reused_task_id: int | None = None
     temp_log_file = tempfile.NamedTemporaryFile(
@@ -250,14 +259,21 @@ def main() -> int:
                 f"nextjs shell could not start after retrying ports: {startup_error or '(no output)'}"
             )
 
-        if "PWR listo para dogfooding" in home_html and "Proyectos" in home_html and "Crear tarea" in home_html:
+        if "PWR listo para dogfooding" in home_html and "Proyectos" in home_html and "Crear proyecto" in home_html:
             ok("home route renders expected readonly shell content")
         else:
             fail("home route is missing expected content")
             failures += 1
 
+        projects_html = wait_for_http(f"{frontend_base}/projects", timeout=60.0)
+        if "Projects" in projects_html and "Crear proyecto" in projects_html and "Lista de proyectos" in projects_html:
+            ok("projects route renders expected project-first content")
+        else:
+            fail("projects route is missing expected content")
+            failures += 1
+
         tasks_html = wait_for_http(f"{frontend_base}/tasks", timeout=60.0)
-        if "Tareas" in tasks_html and "Crear tarea" in tasks_html and "Para retomar" in tasks_html:
+        if "Tasks" in tasks_html and "Filtro por proyecto" in tasks_html and "Lista global" in tasks_html:
             ok("tasks route renders expected creation and reentry content")
         else:
             fail("tasks route is missing expected content")
@@ -287,16 +303,22 @@ def main() -> int:
             fail("observatory route is missing expected content")
             failures += 1
 
-        project_items = request_json(f"{backend_base}/api/projects").get("items", [])
-        if not project_items:
-            fail("backend returned no projects for readonly workspace smoke")
-            return 1
-
-        project_id = int(project_items[0]["id"])
-        controlled_task = request_json(
-            f"{backend_base}/api/projects/{project_id}/tasks",
+        controlled_project = request_json(
+            f"{backend_base}/api/projects",
             method="POST",
             payload={
+                "name": "Next.js route smoke project",
+                "description": "Proyecto controlado para validar jerarquia Project -> Tasks.",
+            },
+        )
+        controlled_project_id = int(controlled_project["id"])
+        ok(f"created controlled project id={controlled_project_id} for route smoke")
+
+        controlled_task = request_json(
+            f"{backend_base}/api/tasks",
+            method="POST",
+            payload={
+                "project_id": controlled_project_id,
                 "title": "Next.js route smoke task",
                 "description": "Tarea controlada para validar detalle readonly en Next.js.",
                 "task_type": "Pensar",
@@ -306,15 +328,30 @@ def main() -> int:
         controlled_task_id = int(controlled_task["id"])
         ok(f"created controlled task id={controlled_task_id} for route smoke")
 
-        project_html = wait_for_http(f"{frontend_base}/projects/{project_id}", timeout=60.0)
+        filtered_tasks_html = wait_for_http(
+            f"{frontend_base}/tasks?project_id={controlled_project_id}",
+            timeout=60.0,
+        )
+        if (
+            controlled_project["name"] in filtered_tasks_html
+            and controlled_task["title"] in filtered_tasks_html
+            and "Filtro por proyecto" in filtered_tasks_html
+        ):
+            ok("tasks route can filter and render project-aware task lists")
+        else:
+            fail("tasks route did not show the expected project-aware filter view")
+            failures += 1
+
+        project_html = wait_for_http(f"{frontend_base}/projects/{controlled_project_id}", timeout=60.0)
         if (
             "Contexto del proyecto" in project_html
             and "Tareas" in project_html
             and "Activos relacionados" in project_html
-            and "Workspace de proyecto en modo lectura" in project_html
+            and "Crear tarea en este proyecto" in project_html
+            and controlled_project["name"] in project_html
             and f"/tasks/{controlled_task_id}" in project_html
         ):
-            ok(f"project readonly route renders expected content for project_id={project_id}")
+            ok(f"project readonly route renders expected content for project_id={controlled_project_id}")
         else:
             fail("project readonly route is missing expected content")
             failures += 1
@@ -327,7 +364,8 @@ def main() -> int:
             and "Ejecucion" in task_html
             and "Resultado" in task_html
             and "Historial" in task_html
-            and f"/projects/{project_id}" in task_html
+            and controlled_project["name"] in task_html
+            and f"/projects/{controlled_project_id}" in task_html
             and "Ejecutar ahora" in task_html
             and "Confianza" in task_html
             and "ejecuciones observadas" in task_html
@@ -444,7 +482,7 @@ def main() -> int:
 
         asset_title = "Next.js route smoke asset"
         created_asset = request_json(
-            f"{backend_base}/api/projects/{project_id}/assets",
+            f"{backend_base}/api/projects/{controlled_project_id}/assets",
             method="POST",
             payload={
                 "task_id": controlled_task_id,
@@ -480,9 +518,12 @@ def main() -> int:
             fail("asset save did not mark converted_to_asset on the related model_run")
             failures += 1
 
-        project_html_after_asset = wait_for_http(f"{frontend_base}/projects/{project_id}", timeout=60.0)
+        project_html_after_asset = wait_for_http(
+            f"{frontend_base}/projects/{controlled_project_id}",
+            timeout=60.0,
+        )
         if asset_title in project_html_after_asset and "Activos relacionados" in project_html_after_asset:
-            ok(f"project route shows the saved asset for project_id={project_id}")
+            ok(f"project route shows the saved asset for project_id={controlled_project_id}")
         else:
             fail("project route did not show the saved asset")
             failures += 1
@@ -494,7 +535,7 @@ def main() -> int:
             failures += 1
 
         reused_task_html, reused_task_url = wait_for_http_response(
-            f"{frontend_base}/projects/{project_id}/assets/{created_asset['id']}/reuse",
+            f"{frontend_base}/projects/{controlled_project_id}/assets/{created_asset['id']}/reuse",
             timeout=60.0,
         )
         task_marker = "/tasks/"
@@ -527,6 +568,7 @@ def main() -> int:
     finally:
         cleanup_controlled_task(reused_task_id)
         cleanup_controlled_task(controlled_task_id)
+        cleanup_controlled_project(controlled_project_id)
         terminate_process_tree(frontend_proc)
         terminate_process_tree(backend_proc)
         if frontend_log_handle:

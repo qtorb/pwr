@@ -21,7 +21,7 @@ def fail(message: str) -> None:
     print(f"[FAIL] {message}")
 
 
-def cleanup(asset_id: int | None, task_id: int | None) -> None:
+def cleanup(asset_id: int | None, task_id: int | None, project_id: int | None) -> None:
     with get_conn() as conn:
         artifact_rows = []
         if task_id:
@@ -39,6 +39,8 @@ def cleanup(asset_id: int | None, task_id: int | None) -> None:
             conn.execute("DELETE FROM executions_history WHERE task_id = ?", (task_id,))
         if task_id:
             conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        if project_id:
+            conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
 
     for row in artifact_rows:
         for key in ("artifact_md_path", "artifact_json_path"):
@@ -57,6 +59,7 @@ def main() -> int:
     failures = 0
     created_task_id: int | None = None
     created_asset_id: int | None = None
+    created_project_id: int | None = None
 
     try:
         with TestClient(app) as client:
@@ -78,15 +81,28 @@ def main() -> int:
                 return 1
             ok(f"listed {len(projects)} project(s) through HTTP")
 
-            project_id = int(projects[0]["id"])
-            detail_response = client.get(f"/api/projects/{project_id}")
+            create_project_response = client.post(
+                "/api/projects",
+                json={
+                    "name": "[FASTAPI CHECK] Controlled project",
+                    "description": "Proyecto controlado para validar integridad Project -> Tasks.",
+                },
+            )
+            if create_project_response.status_code != 200:
+                fail("project creation endpoint failed")
+                return 1
+            created_project = create_project_response.json()
+            created_project_id = int(created_project["id"])
+            ok(f"created controlled project through HTTP id={created_project_id}")
+
+            detail_response = client.get(f"/api/projects/{created_project_id}")
             if detail_response.status_code == 200:
-                ok(f"read project detail id={project_id}")
+                ok(f"read project detail id={created_project_id}")
             else:
                 fail("project detail failed")
                 failures += 1
 
-            tasks_response = client.get(f"/api/projects/{project_id}/tasks")
+            tasks_response = client.get(f"/api/projects/{created_project_id}/tasks")
             if tasks_response.status_code == 200:
                 ok("listed project tasks through HTTP")
             else:
@@ -102,9 +118,25 @@ def main() -> int:
                 fail("home endpoints failed")
                 failures += 1
 
-            create_task_response = client.post(
-                f"/api/projects/{project_id}/tasks",
+            missing_project_response = client.post(
+                "/api/tasks",
                 json={
+                    "title": "[FASTAPI CHECK] Missing project",
+                    "description": "",
+                    "task_type": "Pensar",
+                    "context": "This request should fail because project_id is required.",
+                },
+            )
+            if missing_project_response.status_code == 422:
+                ok("global task creation requires project_id")
+            else:
+                fail("global task creation should reject missing project_id")
+                failures += 1
+
+            create_task_response = client.post(
+                "/api/tasks",
+                json={
+                    "project_id": created_project_id,
                     "title": "[FASTAPI CHECK] Controlled task",
                     "description": "",
                     "task_type": "Pensar",
@@ -118,17 +150,35 @@ def main() -> int:
             created_task_id = int(created_task["id"])
             ok(f"created controlled task through HTTP id={created_task_id}")
 
+            filtered_tasks_response = client.get("/api/tasks", params={"project_id": created_project_id})
+            global_tasks_response = client.get("/api/tasks", params={"limit": 20})
             read_task_response = client.get(f"/api/tasks/{created_task_id}")
             execution_history_response = client.get(f"/api/tasks/{created_task_id}/executions")
             latest_execution_response = client.get(f"/api/tasks/{created_task_id}/executions/latest")
             if (
-                read_task_response.status_code == 200
+                filtered_tasks_response.status_code == 200
+                and global_tasks_response.status_code == 200
+                and read_task_response.status_code == 200
                 and execution_history_response.status_code == 200
                 and latest_execution_response.status_code == 200
             ):
                 ok("task detail and execution endpoints respond")
             else:
                 fail("task detail/execution endpoints failed")
+                failures += 1
+
+            filtered_items = filtered_tasks_response.json().get("items", [])
+            global_items = global_tasks_response.json().get("items", [])
+            read_task_payload = read_task_response.json()
+            if (
+                any(int(item["id"]) == created_task_id for item in filtered_items)
+                and any(int(item["id"]) == created_task_id for item in global_items)
+                and int(read_task_payload.get("project_id") or 0) == created_project_id
+                and read_task_payload.get("project_name") == created_project.get("name")
+            ):
+                ok("global task listing and task detail include project context")
+            else:
+                fail("task endpoints did not expose the expected project context")
                 failures += 1
 
             execute_task_response = client.post(f"/api/tasks/{created_task_id}/execute")
@@ -225,7 +275,7 @@ def main() -> int:
                 failures += 1
 
             create_asset_response = client.post(
-                f"/api/projects/{project_id}/assets",
+                f"/api/projects/{created_project_id}/assets",
                 json={
                     "task_id": created_task_id,
                     "asset_type": "preview" if task_after_execute_payload["execution_status"] == "preview" else "output",
@@ -257,7 +307,7 @@ def main() -> int:
                 failures += 1
 
             asset_detail_response = client.get(f"/api/assets/{created_asset_id}")
-            project_assets_response = client.get(f"/api/projects/{project_id}/assets")
+            project_assets_response = client.get(f"/api/projects/{created_project_id}/assets")
             asset_reuse_response = client.post(f"/api/assets/{created_asset_id}/reuse")
             related_runs_after_asset = find_task_execution_model_runs(
                 created_task_id,
@@ -319,12 +369,13 @@ def main() -> int:
         fail(f"unexpected error: {type(exc).__name__}: {exc}")
         failures += 1
     finally:
-        cleanup(created_asset_id, created_task_id)
-        if created_task_id or created_asset_id:
+        cleanup(created_asset_id, created_task_id, created_project_id)
+        if created_task_id or created_asset_id or created_project_id:
             ok(
                 "cleaned controlled HTTP test data"
                 f"{f' task={created_task_id}' if created_task_id else ''}"
                 f"{f' asset={created_asset_id}' if created_asset_id else ''}"
+                f"{f' project={created_project_id}' if created_project_id else ''}"
             )
 
     print("=" * 28)

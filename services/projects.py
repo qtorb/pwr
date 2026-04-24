@@ -10,6 +10,31 @@ from typing import Dict, List, Optional
 from db import get_conn, now_iso, project_upload_dir
 
 
+PROJECT_SELECT = """
+    SELECT
+        p.*,
+        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count,
+        (SELECT COUNT(*) FROM assets a WHERE a.project_id = p.id) AS asset_count,
+        COALESCE(
+            (
+                SELECT MAX(activity_at)
+                FROM (
+                    SELECT MAX(updated_at) AS activity_at
+                    FROM tasks
+                    WHERE project_id = p.id
+                    UNION ALL
+                    SELECT MAX(COALESCE(updated_at, created_at)) AS activity_at
+                    FROM assets
+                    WHERE project_id = p.id
+                )
+            ),
+            p.updated_at,
+            p.created_at
+        ) AS last_activity_at
+    FROM projects p
+"""
+
+
 def save_project_files(project_id: int, files) -> List[Dict]:
     saved = []
     dest = project_upload_dir(project_id)
@@ -31,19 +56,23 @@ def save_project_files(project_id: int, files) -> List[Dict]:
 def get_projects() -> List[sqlite3.Row]:
     with get_conn() as conn:
         return conn.execute(
-            """
-            SELECT p.*,
-                   (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count,
-                   (SELECT COUNT(*) FROM assets a WHERE a.project_id = p.id) AS asset_count
-            FROM projects p
-            ORDER BY p.is_favorite DESC, p.updated_at DESC, p.id DESC
+            PROJECT_SELECT
+            + """
+            ORDER BY p.is_favorite DESC, last_activity_at DESC, p.updated_at DESC, p.id DESC
             """
         ).fetchall()
 
 
 def get_project(project_id: int) -> Optional[sqlite3.Row]:
     with get_conn() as conn:
-        return conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        return conn.execute(
+            PROJECT_SELECT
+            + """
+            WHERE p.id = ?
+            LIMIT 1
+            """,
+            (project_id,),
+        ).fetchone()
 
 
 def update_project(

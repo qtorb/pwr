@@ -72,7 +72,7 @@ function ProjectList({ items }) {
           <div className="project-stats">
             <span>{project.task_count || 0} tareas</span>
             <span>{project.asset_count || 0} activos</span>
-            <span>{formatDate(project.updated_at || project.created_at)}</span>
+            <span>{formatDate(project.last_activity_at || project.updated_at || project.created_at)}</span>
           </div>
         </Link>
       ))}
@@ -103,11 +103,11 @@ export default async function HomePage() {
           </div>
 
           <div className="hero-actions">
-            <Link href="/tasks" className="hero-primary">
-              Crear tarea
+            <Link href="/projects" className="hero-primary">
+              Crear proyecto
             </Link>
-            <Link href="/observatory" className="hero-secondary">
-              Ver observatory
+            <Link href="/projects" className="hero-secondary">
+              Ver projects
             </Link>
           </div>
 
@@ -153,7 +153,7 @@ export default async function HomePage() {
               <div className="panel-body">
                 <div className="band-head">
                   <h2>Proyectos</h2>
-                  <div className="subtle">Listado base para la siguiente fase</div>
+                  <div className="subtle">Entrada natural para crear y entender tareas con contexto</div>
                 </div>
               </div>
               <ProjectList items={projects} />

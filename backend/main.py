@@ -22,8 +22,9 @@ from services.model_observatory import (
     mark_task_execution_runs_reused_later,
     register_task_execution_model_run,
 )
-from services.projects import get_project, get_projects
+from services.projects import create_project, get_project, get_projects
 from services.tasks import (
+    get_tasks,
     get_project_tasks,
     get_recent_home_tasks,
     get_reentry_tasks,
@@ -117,11 +118,24 @@ def safe_mark_asset_reused(task_id: int | None, execution_id: int | None) -> Non
     mark_task_execution_runs_reused_later(int(task_id), execution_id=int(execution_id) if execution_id else None)
 
 
-class CreateTaskRequest(BaseModel):
+class CreateProjectRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    description: str = ""
+    objective: str = ""
+    base_context: str = ""
+    base_instructions: str = ""
+    tags: str = ""
+
+
+class CreateProjectTaskRequest(BaseModel):
     title: str = Field(..., min_length=1)
     description: str = ""
     task_type: str = "Pensar"
     context: str = ""
+
+
+class CreateTaskRequest(CreateProjectTaskRequest):
+    project_id: int
 
 
 class CreateAssetRequest(BaseModel):
@@ -228,6 +242,20 @@ def list_projects() -> dict[str, Any]:
     return {"items": [row_to_dict(project) for project in get_projects()]}
 
 
+@app.post("/api/projects")
+def projects_create(payload: CreateProjectRequest) -> dict[str, Any]:
+    project_id = create_project(
+        name=payload.name,
+        description=payload.description,
+        objective=payload.objective,
+        base_context=payload.base_context,
+        base_instructions=payload.base_instructions,
+        tags=payload.tags,
+        uploaded_files=None,
+    )
+    return row_to_dict(require_project(project_id))
+
+
 @app.get("/api/model-runs/summary")
 def model_runs_summary(
     limit: int = Query(default=100, ge=1, le=500),
@@ -331,6 +359,22 @@ def project_detail(project_id: int) -> dict[str, Any]:
     return row_to_dict(project)
 
 
+@app.get("/api/tasks")
+def list_tasks(
+    project_id: int | None = Query(default=None, ge=1),
+    search: str = "",
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    if project_id is not None:
+        require_project(project_id)
+    return {
+        "items": [
+            row_to_dict(task)
+            for task in get_tasks(project_id=project_id, search=search, limit=limit)
+        ]
+    }
+
+
 @app.get("/api/projects/{project_id}/tasks")
 def project_tasks(project_id: int, search: str = "") -> dict[str, Any]:
     require_project(project_id)
@@ -338,7 +382,7 @@ def project_tasks(project_id: int, search: str = "") -> dict[str, Any]:
 
 
 @app.post("/api/projects/{project_id}/tasks")
-def project_create_task(project_id: int, payload: CreateTaskRequest) -> dict[str, Any]:
+def project_create_task(project_id: int, payload: CreateProjectTaskRequest) -> dict[str, Any]:
     require_project(project_id)
     task_id = create_task(
         project_id=project_id,
@@ -350,6 +394,20 @@ def project_create_task(project_id: int, payload: CreateTaskRequest) -> dict[str
     )
     task = require_task(task_id)
     return row_to_dict(task)
+
+
+@app.post("/api/tasks")
+def tasks_create(payload: CreateTaskRequest) -> dict[str, Any]:
+    require_project(payload.project_id)
+    task_id = create_task(
+        project_id=payload.project_id,
+        title=payload.title,
+        description=payload.description,
+        task_type=payload.task_type,
+        context=payload.context,
+        uploaded_files=None,
+    )
+    return row_to_dict(require_task(task_id))
 
 
 @app.get("/api/tasks/{task_id}")

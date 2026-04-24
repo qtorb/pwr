@@ -2,8 +2,8 @@
 
 const DEFAULT_API_BASE_URL = process.env.PWR_API_BASE_URL || "http://127.0.0.1:8000";
 
-export async function createTaskAction(payload) {
-  const response = await fetch(`${DEFAULT_API_BASE_URL}/api/tasks`, {
+export async function createProjectAction(payload) {
+  const response = await fetch(`${DEFAULT_API_BASE_URL}/api/projects`, {
     method: "POST",
     cache: "no-store",
     headers: {
@@ -11,11 +11,12 @@ export async function createTaskAction(payload) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      project_id: Number(payload.projectId),
-      title: payload.title,
+      name: payload.name,
       description: payload.description || "",
-      task_type: payload.taskType || "Pensar",
-      context: payload.context || "",
+      objective: payload.objective || "",
+      base_context: payload.baseContext || "",
+      base_instructions: payload.baseInstructions || "",
+      tags: payload.tags || "",
     }),
   });
 
@@ -24,7 +25,7 @@ export async function createTaskAction(payload) {
   }));
 
   if (!response.ok) {
-    throw new Error(body.detail || body.error || "Task creation failed.");
+    throw new Error(body.detail || body.error || "Project creation failed.");
   }
 
   return body;

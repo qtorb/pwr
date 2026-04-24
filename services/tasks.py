@@ -13,6 +13,18 @@ from router.providers import build_execution_prompt
 from state_contract import HOME_ACTIVITY_STATES, HOME_RETAKE_STATES, normalize_execution_state
 
 
+TASK_SELECT = """
+    SELECT
+        t.*,
+        p.name AS project_name,
+        p.slug AS project_slug,
+        p.description AS project_description,
+        p.objective AS project_objective
+    FROM tasks t
+    LEFT JOIN projects p ON t.project_id = p.id
+"""
+
+
 def build_task_input(
     task_id: int,
     title: str,
@@ -80,6 +92,10 @@ def save_task_files(project_id: int, task_id: int, files) -> List[Dict]:
 def create_task(project_id: int, title: str, description: str, task_type: str, context: str, uploaded_files) -> int:
     created = now_iso()
     with get_conn() as conn:
+        project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not project:
+            raise ValueError(f"Project {project_id} not found")
+
         cur = conn.execute(
             """
             INSERT INTO tasks (
@@ -92,7 +108,6 @@ def create_task(project_id: int, title: str, description: str, task_type: str, c
         )
         task_id = int(cur.lastrowid)
 
-        project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
         task_files = save_task_files(project_id, task_id, uploaded_files)
         task_input = build_task_input(
             task_id=task_id,
@@ -133,26 +148,57 @@ def create_task(project_id: int, title: str, description: str, task_type: str, c
 
 
 def get_project_tasks(project_id: int, search: str = "") -> List[sqlite3.Row]:
+    where_clauses = ["t.project_id = ?"]
+    params: list = [project_id]
+    if search.strip():
+        pattern = f"%{search.strip()}%"
+        where_clauses.append("(t.title LIKE ? OR t.description LIKE ? OR t.context LIKE ?)")
+        params.extend([pattern, pattern, pattern])
+
     with get_conn() as conn:
-        if search.strip():
-            pattern = f"%{search.strip()}%"
-            return conn.execute(
-                """
-                SELECT * FROM tasks
-                WHERE project_id = ? AND (title LIKE ? OR description LIKE ? OR context LIKE ?)
-                ORDER BY updated_at DESC, id DESC
-                """,
-                (project_id, pattern, pattern, pattern),
-            ).fetchall()
         return conn.execute(
-            "SELECT * FROM tasks WHERE project_id = ? ORDER BY updated_at DESC, id DESC",
-            (project_id,),
+            TASK_SELECT
+            + f"""
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY t.updated_at DESC, t.id DESC
+            """,
+            tuple(params),
         ).fetchall()
+
+
+def get_tasks(project_id: Optional[int] = None, search: str = "", limit: Optional[int] = None) -> List[sqlite3.Row]:
+    where_clauses = []
+    params: list = []
+    if project_id is not None:
+        where_clauses.append("t.project_id = ?")
+        params.append(project_id)
+    if search.strip():
+        pattern = f"%{search.strip()}%"
+        where_clauses.append("(t.title LIKE ? OR t.description LIKE ? OR t.context LIKE ?)")
+        params.extend([pattern, pattern, pattern])
+
+    sql = TASK_SELECT
+    if where_clauses:
+        sql += f"\nWHERE {' AND '.join(where_clauses)}"
+    sql += "\nORDER BY t.updated_at DESC, t.id DESC"
+    if limit is not None:
+        sql += "\nLIMIT ?"
+        params.append(limit)
+
+    with get_conn() as conn:
+        return conn.execute(sql, tuple(params)).fetchall()
 
 
 def get_task(task_id: int) -> Optional[sqlite3.Row]:
     with get_conn() as conn:
-        return conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        return conn.execute(
+            TASK_SELECT
+            + """
+            WHERE t.id = ?
+            LIMIT 1
+            """,
+            (task_id,),
+        ).fetchone()
 
 
 def update_task_execution(

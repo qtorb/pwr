@@ -192,6 +192,163 @@ def ensure_column(conn: sqlite3.Connection, table: str, column: str, definition_
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition_sql}")
 
 
+def ensure_default_project(
+    conn: sqlite3.Connection,
+    *,
+    name: str = "Inbox",
+    description: str = "Proyecto por defecto para tareas legacy o sin contexto de proyecto valido.",
+) -> int:
+    existing = conn.execute(
+        """
+        SELECT id
+        FROM projects
+        WHERE LOWER(COALESCE(slug, '')) = 'inbox'
+           OR LOWER(COALESCE(name, '')) = 'inbox'
+        ORDER BY id ASC
+        LIMIT 1
+        """
+    ).fetchone()
+    if existing:
+        return int(existing["id"])
+
+    created = now_iso()
+    cur = conn.execute(
+        """
+        INSERT INTO projects (
+            name, slug, description, objective, base_context, base_instructions,
+            tags_json, is_favorite, created_at, updated_at
+        )
+        VALUES (?, 'inbox', ?, '', '', '', '[]', 0, ?, ?)
+        """,
+        (name, description, created, created),
+    )
+    return int(cur.lastrowid)
+
+
+def migrate_records_to_valid_projects(conn: sqlite3.Connection) -> int | None:
+    timestamp = now_iso()
+    orphan_task_count = int(
+        conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM tasks t
+            LEFT JOIN projects p ON t.project_id = p.id
+            WHERE t.project_id IS NULL OR p.id IS NULL
+            """
+        ).fetchone()[0]
+        or 0
+    )
+    orphan_asset_count = int(
+        conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM assets a
+            LEFT JOIN projects p ON a.project_id = p.id
+            LEFT JOIN tasks t ON a.task_id = t.id
+            WHERE (a.project_id IS NULL OR p.id IS NULL)
+              AND t.id IS NULL
+            """
+        ).fetchone()[0]
+        or 0
+    )
+
+    inbox_id: int | None = None
+    if orphan_task_count or orphan_asset_count:
+        inbox_id = ensure_default_project(conn)
+
+    if orphan_task_count and inbox_id is not None:
+        conn.execute(
+            """
+            UPDATE tasks
+            SET project_id = ?,
+                updated_at = CASE
+                    WHEN updated_at IS NULL OR TRIM(updated_at) = '' THEN ?
+                    ELSE updated_at
+                END
+            WHERE id IN (
+                SELECT t.id
+                FROM tasks t
+                LEFT JOIN projects p ON t.project_id = p.id
+                WHERE t.project_id IS NULL OR p.id IS NULL
+            )
+            """,
+            (inbox_id, timestamp),
+        )
+
+    conn.execute(
+        """
+        UPDATE assets
+        SET project_id = (
+            SELECT t.project_id
+            FROM tasks t
+            WHERE t.id = assets.task_id
+        )
+        WHERE task_id IS NOT NULL
+          AND EXISTS (SELECT 1 FROM tasks t WHERE t.id = assets.task_id)
+          AND COALESCE(project_id, -1) != COALESCE(
+                (SELECT t.project_id FROM tasks t WHERE t.id = assets.task_id),
+                -1
+          )
+        """
+    )
+
+    if orphan_asset_count and inbox_id is not None:
+        conn.execute(
+            """
+            UPDATE assets
+            SET project_id = ?,
+                updated_at = CASE
+                    WHEN updated_at IS NULL OR TRIM(updated_at) = '' THEN ?
+                    ELSE updated_at
+                END
+            WHERE id IN (
+                SELECT a.id
+                FROM assets a
+                LEFT JOIN projects p ON a.project_id = p.id
+                LEFT JOIN tasks t ON a.task_id = t.id
+                WHERE (a.project_id IS NULL OR p.id IS NULL)
+                  AND t.id IS NULL
+            )
+            """,
+            (inbox_id, timestamp),
+        )
+
+    conn.execute(
+        """
+        UPDATE executions_history
+        SET project_id = (
+            SELECT t.project_id
+            FROM tasks t
+            WHERE t.id = executions_history.task_id
+        )
+        WHERE EXISTS (SELECT 1 FROM tasks t WHERE t.id = executions_history.task_id)
+          AND COALESCE(project_id, -1) != COALESCE(
+                (SELECT t.project_id FROM tasks t WHERE t.id = executions_history.task_id),
+                -1
+          )
+        """
+    )
+
+    conn.execute(
+        """
+        UPDATE model_runs
+        SET project_id = (
+            SELECT t.project_id
+            FROM tasks t
+            WHERE t.id = model_runs.task_id
+        )
+        WHERE task_id IS NOT NULL
+          AND EXISTS (SELECT 1 FROM tasks t WHERE t.id = model_runs.task_id)
+          AND COALESCE(project_id, -1) != COALESCE(
+                (SELECT t.project_id FROM tasks t WHERE t.id = model_runs.task_id),
+                -1
+          )
+        """
+    )
+
+    return inbox_id
+
+
 def normalize_existing_task_states(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
@@ -625,3 +782,5 @@ def init_db() -> None:
                     ),
                 ],
             )
+
+        migrate_records_to_valid_projects(conn)

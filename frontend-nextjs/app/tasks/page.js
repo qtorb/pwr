@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import AppHeader from "../_components/app-header";
-import { getShellHomeData } from "../../lib/pwr-api";
+import { getTasksPageData } from "../../lib/pwr-api";
 import TaskQuickCreatePanel from "./task-quick-create-panel";
 
 export const dynamic = "force-dynamic";
@@ -31,18 +31,26 @@ function StateBadge({ state }) {
   return <span className={`badge ${normalized}`}>{labels[normalized] || normalized}</span>;
 }
 
-function uniqueTasks(...groups) {
-  const seen = new Set();
-  const items = [];
-
-  groups.flat().forEach((task) => {
-    const key = String(task?.id || "");
-    if (!key || seen.has(key)) return;
-    seen.add(key);
-    items.push(task);
-  });
-
-  return items;
+function FilterRow({ projects, selectedProjectId }) {
+  return (
+    <div className="filter-row">
+      <Link
+        href="/tasks"
+        className={`filter-chip${selectedProjectId ? "" : " active"}`}
+      >
+        Todas
+      </Link>
+      {projects.map((project) => (
+        <Link
+          key={project.id}
+          href={`/tasks?project_id=${project.id}`}
+          className={`filter-chip${String(selectedProjectId || "") === String(project.id) ? " active" : ""}`}
+        >
+          {project.name}
+        </Link>
+      ))}
+    </div>
+  );
 }
 
 function TaskList({ items, emptyMessage }) {
@@ -62,9 +70,10 @@ function TaskList({ items, emptyMessage }) {
             <span>{task.project_name || `Proyecto ${task.project_id}`}</span>
             <span>{task.task_type || "Pensar"}</span>
             <span>{formatDate(task.updated_at)}</span>
+            {task.suggested_model ? <span>{task.suggested_model}</span> : null}
           </div>
           <div className="subtle">
-            {task.router_summary || task.description || task.context || "Sin contexto visible para esta tarea."}
+            {task.description || task.context || task.router_summary || "Sin contexto visible para esta tarea."}
           </div>
         </Link>
       ))}
@@ -72,14 +81,15 @@ function TaskList({ items, emptyMessage }) {
   );
 }
 
-export default async function TasksPage() {
-  const { apiBaseUrl, activity, reentry, projects, errors } = await getShellHomeData();
-  const visibleTasks = uniqueTasks(reentry, activity);
+export default async function TasksPage({ searchParams }) {
+  const resolvedSearchParams = (await searchParams) || {};
+  const selectedProjectId = resolvedSearchParams.project_id || null;
+  const { apiBaseUrl, tasks, projects, selectedProject, errors } = await getTasksPageData(selectedProjectId);
 
   return (
     <main className="shell">
       <AppHeader
-        subtitle="Tareas y arranque rapido sobre FastAPI"
+        subtitle="Vista global de tareas con contexto de proyecto"
         statusText="API conectada"
         statusTone="ok"
       />
@@ -92,10 +102,10 @@ export default async function TasksPage() {
               <span>/</span>
               <span>Tasks</span>
             </div>
-            <h1>Tareas</h1>
+            <h1>{selectedProject ? `Tareas de ${selectedProject.name}` : "Tasks"}</h1>
             <p>
-              Entrada operativa simple para arrancar trabajo nuevo y revisar tareas activas sin salir de la
-              shell Next.js.
+              La vista global sigue existiendo, pero cada tarea deja claro a qu&eacute; proyecto pertenece.
+              El flujo preferente es entrar por proyecto y crear trabajo dentro de su contexto.
             </p>
             <div className="subtle">API base actual: {apiBaseUrl}</div>
           </div>
@@ -117,23 +127,32 @@ export default async function TasksPage() {
         <section className="workspace-grid">
           <div className="workspace-main">
             <div className="panel">
-              <div className="panel-body">
+              <div className="panel-body stack">
                 <div className="band-head">
-                  <h2>Para retomar</h2>
-                  <div className="subtle">Estados que probablemente necesitan accion</div>
+                  <h2>Filtro por proyecto</h2>
+                  <div className="subtle">
+                    {selectedProject ? "Mostrando un solo proyecto" : "Mostrando todas las tareas visibles"}
+                  </div>
                 </div>
+                <FilterRow projects={projects} selectedProjectId={selectedProjectId} />
               </div>
-              <TaskList items={reentry} emptyMessage="No hay tareas abiertas o con fallo para retomar." />
             </div>
 
             <div className="panel">
               <div className="panel-body">
                 <div className="band-head">
-                  <h2>Recientes</h2>
-                  <div className="subtle">{visibleTasks.length} tareas visibles</div>
+                  <h2>Lista global</h2>
+                  <div className="subtle">{tasks.length} tareas visibles</div>
                 </div>
               </div>
-              <TaskList items={visibleTasks} emptyMessage="Todavia no hay tareas recientes visibles." />
+              <TaskList
+                items={tasks}
+                emptyMessage={
+                  selectedProject
+                    ? "Este proyecto todavia no tiene tareas visibles."
+                    : "Todavia no hay tareas visibles en la API."
+                }
+              />
             </div>
           </div>
 
@@ -143,8 +162,8 @@ export default async function TasksPage() {
             <div className="panel">
               <div className="panel-body stack">
                 <div className="band-head">
-                  <h2>Proyectos</h2>
-                  <div className="subtle">Para crear sin perder contexto</div>
+                  <h2>Ir a projects</h2>
+                  <div className="subtle">Entrada natural al trabajo</div>
                 </div>
                 {projects.slice(0, 6).map((project) => (
                   <Link key={project.id} href={`/projects/${project.id}`} className="inline-link">
