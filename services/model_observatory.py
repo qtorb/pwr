@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime
 from typing import Optional
 
 from db import get_conn, now_iso, row_value, safe_json_loads
@@ -219,10 +220,85 @@ def get_best_model_hint(
     if not candidates:
         return None
 
+    task_runs = list_model_runs(
+        limit=1000,
+        source_app=source_app,
+        workflow=workflow,
+        task_type=normalized_task_type,
+    )
+    grouped_task_runs: dict[tuple[str, str, str], list[sqlite3.Row]] = {}
+    for row in task_runs:
+        key = (
+            str(row_value(row, "provider", "") or "").strip(),
+            str(row_value(row, "model", "") or "").strip(),
+            str(row_value(row, "task_type", "") or "").strip(),
+        )
+        grouped_task_runs.setdefault(key, []).append(row)
+
+    def parse_created_at(value: str) -> datetime | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            return datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    def recency_weight(created_at: str) -> float | None:
+        dt = parse_created_at(created_at)
+        if dt is None:
+            return None
+        now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now()
+        age_days = max(0.0, (now - dt).total_seconds() / 86400.0)
+        if age_days <= 3:
+            return 1.0
+        if age_days <= 14:
+            return 0.7
+        return 0.4
+
+    def weighted_binary_rate(rows: list[sqlite3.Row], field_name: str) -> tuple[float | None, bool]:
+        if not rows:
+            return None, False
+
+        weighted_total = 0.0
+        weighted_hits = 0.0
+        has_valid_timestamp = False
+        for row in rows:
+            weight = recency_weight(str(row_value(row, "created_at", "") or ""))
+            if weight is None:
+                weight = 1.0
+            else:
+                has_valid_timestamp = True
+            weighted_total += weight
+            if int(row_value(row, field_name, 0) or 0) != 0:
+                weighted_hits += weight
+
+        if weighted_total <= 0 or not has_valid_timestamp:
+            return None, False
+        return round(weighted_hits / weighted_total, 4), True
+
+    def candidate_rates(row: dict) -> tuple[float, float, bool]:
+        key = (
+            str(row.get("provider") or "").strip(),
+            str(row.get("model") or "").strip(),
+            str(row.get("task_type") or "").strip(),
+        )
+        rows = grouped_task_runs.get(key, [])
+        weighted_conversion_rate, conversion_weighted = weighted_binary_rate(rows, "converted_to_asset")
+        weighted_reuse_rate, reuse_weighted = weighted_binary_rate(rows, "reused_later")
+        if conversion_weighted and reuse_weighted:
+            return float(weighted_conversion_rate or 0.0), float(weighted_reuse_rate or 0.0), True
+        return (
+            float(row.get("conversion_rate") or 0.0),
+            float(row.get("reuse_rate") or 0.0),
+            False,
+        )
+
     def score(row: dict) -> float:
+        conversion_rate, reuse_rate, _ = candidate_rates(row)
         return round(
-            (float(row.get("conversion_rate") or 0.0) * 0.6)
-            + (float(row.get("reuse_rate") or 0.0) * 0.4),
+            (conversion_rate * 0.6)
+            + (reuse_rate * 0.4),
             4,
         )
 
@@ -245,8 +321,8 @@ def get_best_model_hint(
     best = ordered[0]
     total_runs = int(best.get("total_runs") or 0)
     confidence = confidence_label(total_runs)
-    conversion_rate = float(best.get("conversion_rate") or 0.0)
-    reuse_rate = float(best.get("reuse_rate") or 0.0)
+    conversion_rate, reuse_rate, weighting_enabled = candidate_rates(best)
+    weighting_state = "enabled" if weighting_enabled else "fallback"
 
     return {
         "provider": best.get("provider"),
@@ -259,7 +335,8 @@ def get_best_model_hint(
             f"conversion={conversion_rate:.4f}, "
             f"reuse={reuse_rate:.4f}, "
             f"runs={total_runs}, "
-            f"confidence={confidence}"
+            f"confidence={confidence}, "
+            f"recent_weighting={weighting_state}"
         ),
     }
 

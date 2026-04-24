@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from fastapi.testclient import TestClient
 
 from backend.main import app
@@ -151,6 +153,24 @@ def main() -> int:
                 created_run_ids.append(int(created["id"]))
             ok(f"registered {len(created_run_ids)} model run(s)")
 
+            with get_conn() as conn:
+                conn.execute(
+                    "UPDATE model_runs SET created_at = ? WHERE id = ?",
+                    ((datetime.now() - timedelta(days=7)).isoformat(timespec="seconds"), created_run_ids[0]),
+                )
+                conn.execute(
+                    "UPDATE model_runs SET created_at = ? WHERE id = ?",
+                    ((datetime.now() - timedelta(days=1)).isoformat(timespec="seconds"), created_run_ids[1]),
+                )
+                conn.execute(
+                    "UPDATE model_runs SET created_at = ? WHERE id = ?",
+                    ((datetime.now() - timedelta(days=30)).isoformat(timespec="seconds"), created_run_ids[2]),
+                )
+                conn.execute(
+                    "UPDATE model_runs SET created_at = ? WHERE id = ?",
+                    ("invalid-timestamp", created_run_ids[3]),
+                )
+
             list_response = client.get("/api/model-runs", params={"source_app": "pwr-check", "limit": 10})
             if list_response.status_code != 200:
                 fail("model run listing failed")
@@ -221,17 +241,36 @@ def main() -> int:
                 and recommended.get("provider") == "gemini"
                 and recommended.get("model") == "gemini-2.5-pro"
                 and recommended.get("task_type") == "briefing"
-                and abs(float(recommended.get("score") or 0.0) - 0.5333) <= 0.0002
+                and abs(float(recommended.get("score") or 0.0) - 0.6762) <= 0.0002
                 and int(recommended.get("total_runs") or 0) == 3
                 and recommended.get("confidence") == "low"
                 and "conversion=" in str(recommended.get("reason") or "")
                 and "reuse=" in str(recommended.get("reason") or "")
                 and "runs=3" in str(recommended.get("reason") or "")
                 and "confidence=low" in str(recommended.get("reason") or "")
+                and "recent_weighting=enabled" in str(recommended.get("reason") or "")
             ):
                 ok("best model hint returns the expected recommendation")
             else:
                 fail("best model hint did not return the expected recommendation")
+                failures += 1
+
+            fallback_best_response = client.get("/api/model-runs/best", params={"task_type": "summary"})
+            if fallback_best_response.status_code != 200:
+                fail("best model hint fallback endpoint failed")
+                return 1
+
+            fallback_recommended = fallback_best_response.json().get("recommended")
+            if (
+                fallback_recommended
+                and fallback_recommended.get("provider") == "openai"
+                and fallback_recommended.get("model") == "gpt-5.4-mini"
+                and abs(float(fallback_recommended.get("score") or 0.0) - 0.4) <= 0.0002
+                and "recent_weighting=fallback" in str(fallback_recommended.get("reason") or "")
+            ):
+                ok("best model hint falls back cleanly when timestamps are invalid")
+            else:
+                fail("best model hint did not fall back as expected for invalid timestamps")
                 failures += 1
 
             empty_best_response = client.get("/api/model-runs/best", params={"task_type": "nonexistent"})
