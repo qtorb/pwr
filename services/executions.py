@@ -17,8 +17,9 @@ from db import (
     slugify_for_path,
 )
 from router.providers import build_execution_prompt
+from router.execution_service import ExecutionService
 from services.tasks import build_task_input_from_rows
-from state_contract import normalize_execution_state
+from state_contract import normalize_execution_state, resolve_runtime_execution_state
 
 
 def normalize_trace(trace: dict) -> dict:
@@ -133,6 +134,176 @@ Timestamp: {artifact['timestamp']}
     md_path.write_text(md, encoding="utf-8")
     json_path.write_text(json.dumps(artifact, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"md": repo_relative_path(md_path), "json": repo_relative_path(json_path)}
+
+
+def generate_demo_proposal(decision, task_input) -> dict:
+    """Build the same preview payload used by the live runtime fallback."""
+    title = str(task_input.title or "").strip()
+    description = str(task_input.description or "").strip()
+    context = str(task_input.context or "").strip()
+    mode = str(decision.mode or "")
+
+    if mode == "eco":
+        time_estimate = "~2-4s"
+        cost_estimate = "bajo"
+    else:
+        time_estimate = "~10-30s"
+        cost_estimate = "medio-alto"
+
+    understood_parts = []
+    if title:
+        understood_parts.append(f"Quieres {title.lower()}")
+    if description:
+        understood_parts.append(description)
+    if context:
+        understood_parts.append(f"Con contexto: {context}")
+
+    understood = ", ".join(understood_parts) if understood_parts else "Analizar una tarea"
+    understood = understood[0].upper() + understood[1:] + "."
+
+    if mode == "eco":
+        strategy = (
+            "Lo abordaria de forma rapida, enfocandome en lo esencial y devolviendo "
+            "una respuesta clara y directa."
+        )
+    else:
+        strategy = (
+            "Lo abordaria con analisis profundo, considerando alternativas y "
+            "devolviendo una recomendacion fundamentada."
+        )
+
+    priority = "velocidad y claridad" if mode == "eco" else "precision y profundidad"
+    task_type = str(task_input.task_type or "Pensar")
+    expected_output_map = {
+        "Pensar": "analisis estructurado con recomendaciones",
+        "Escribir": "contenido claro y listo para usar",
+        "Programar": "codigo funcional y documentado",
+        "Revisar": "evaluacion con puntos de mejora",
+        "Decidir": "comparacion de opciones con recomendacion",
+    }
+    execution_prompt = build_execution_prompt(task_input)
+
+    return {
+        "understood": understood,
+        "strategy": strategy,
+        "priority": priority,
+        "expected_output": expected_output_map.get(task_type, "respuesta clara y estructurada"),
+        "execution_prompt": execution_prompt,
+        "suggested_prompt": execution_prompt,
+        "mode": mode,
+        "model": str(decision.model or ""),
+        "time_estimate": time_estimate,
+        "cost_estimate": cost_estimate,
+    }
+
+
+def execute_task_now(task_id: int) -> dict:
+    """Execute a task through the live PWR runtime and persist the result."""
+    with get_conn() as conn:
+        task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+        if not task:
+            raise ValueError(f"Task {task_id} not found")
+
+        project = conn.execute("SELECT * FROM projects WHERE id = ?", (task["project_id"],)).fetchone()
+        if not project:
+            raise ValueError(f"Project {task['project_id']} not found for task {task_id}")
+
+        task_input = build_task_input_from_rows(task, project)
+        execution_prompt = build_execution_prompt(task_input)
+        result = ExecutionService(conn).execute(task_input)
+        execution_status = resolve_runtime_execution_state(
+            result.status,
+            result.error.code if result.error else "",
+        )
+
+        if result.status == "error":
+            if execution_status == "preview":
+                demo_proposal = generate_demo_proposal(result.routing, task_input)
+                output = f"""[PROPUESTA PREVIA - Modo Demo]
+
+Que he entendido:
+{demo_proposal['understood']}
+
+Como lo resolveria:
+{demo_proposal['strategy']}
+
+Prioridad: {demo_proposal['priority']}
+Salida esperada: {demo_proposal['expected_output']}
+
+Contenido de ejecucion:
+{demo_proposal['execution_prompt']}
+
+---
+Nota: Esta es una propuesta previa basada en el analisis del Router.
+Para obtener el resultado real, conecta un motor en Configuracion.
+"""
+                extract = demo_proposal["understood"]
+                router_summary = (
+                    f"Propuesta previa (demo)\n"
+                    f"Modo: {result.routing.mode}\n"
+                    f"Modelo: {result.routing.model}\n"
+                    f"Motivo:\n- {result.routing.reasoning_path}\n\n"
+                    f"Para resultado real: Conecta {result.routing.provider}"
+                )
+                message = "Tarea actualizada con una propuesta previa."
+            else:
+                output = ""
+                extract = ""
+                router_summary = (
+                    f"Intento fallido\n"
+                    f"Modo: {result.routing.mode}\n"
+                    f"Modelo: {result.metrics.model_used}\n"
+                    f"Error: {result.error.code}\n"
+                    f"Mensaje: {result.error.message}\n\n"
+                    f"Motivo:\n- {result.routing.reasoning_path}"
+                )
+                message = "La ejecucion termino en fallo."
+        else:
+            output = result.output_text
+            extract = output[:700]
+            router_summary = (
+                f"Ejecucion completada\n"
+                f"Modo: {result.routing.mode}\n"
+                f"Modelo: {result.metrics.model_used}\n"
+                f"Proveedor: {result.metrics.provider_used}\n"
+                f"Complejidad: {result.routing.complexity_score:.2f}\n"
+                f"Latencia: {result.metrics.latency_ms} ms\n"
+                f"Coste estimado: ${result.metrics.estimated_cost:.3f}\n\n"
+                f"Motivo:\n- {result.routing.reasoning_path}"
+            )
+            message = "La tarea se ejecuto y quedo actualizada."
+
+        router_metrics = {
+            "mode": result.routing.mode,
+            "model": result.metrics.model_used,
+            "provider": result.metrics.provider_used,
+            "latency_ms": result.metrics.latency_ms,
+            "estimated_cost": result.metrics.estimated_cost,
+            "complexity_score": result.routing.complexity_score,
+            "status": execution_status,
+            "reasoning_path": result.routing.reasoning_path,
+            "execution_prompt": execution_prompt,
+            "error_code": result.error.code if result.error else "",
+            "error_message": result.error.message if result.error else "",
+            "executed_at": now_iso(),
+        }
+        save_execution_result(
+            task_id=task_id,
+            model_used=result.metrics.model_used,
+            router_summary=router_summary,
+            llm_output=output,
+            useful_extract=extract,
+            execution_status=execution_status,
+            router_metrics=router_metrics,
+        )
+
+    latest_run = get_latest_execution_run(task_id)
+    return {
+        "task_id": task_id,
+        "status": execution_status,
+        "execution_id": int(row_value(latest_run, "id", 0) or 0) or None,
+        "message": message,
+    }
 
 
 def persist_execution_history(

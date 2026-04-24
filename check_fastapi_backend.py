@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from backend.main import app
+from db import BASE_DIR
 from db import get_conn
 
 
@@ -19,10 +22,27 @@ def fail(message: str) -> None:
 
 def cleanup(asset_id: int | None, task_id: int | None) -> None:
     with get_conn() as conn:
+        artifact_rows = []
+        if task_id:
+            artifact_rows = conn.execute(
+                "SELECT artifact_md_path, artifact_json_path FROM executions_history WHERE task_id = ?",
+                (task_id,),
+            ).fetchall()
         if asset_id:
             conn.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
         if task_id:
+            conn.execute("DELETE FROM executions_history WHERE task_id = ?", (task_id,))
+        if task_id:
             conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+
+    for row in artifact_rows:
+        for key in ("artifact_md_path", "artifact_json_path"):
+            rel_path = row[key]
+            if not rel_path:
+                continue
+            path = (BASE_DIR / rel_path).resolve()
+            if path.exists():
+                path.unlink()
 
 
 def main() -> int:
@@ -103,6 +123,31 @@ def main() -> int:
                 ok("task detail and execution endpoints respond")
             else:
                 fail("task detail/execution endpoints failed")
+                failures += 1
+
+            execute_task_response = client.post(f"/api/tasks/{created_task_id}/execute")
+            if execute_task_response.status_code == 200:
+                execute_payload = execute_task_response.json()
+                if execute_payload.get("status") in {"preview", "failed", "executed"}:
+                    ok(f"task execution endpoint responds with status={execute_payload['status']}")
+                else:
+                    fail("task execution endpoint returned an invalid status")
+                    failures += 1
+            else:
+                fail("task execution endpoint failed")
+                failures += 1
+
+            latest_after_execute = client.get(f"/api/tasks/{created_task_id}/executions/latest")
+            task_after_execute = client.get(f"/api/tasks/{created_task_id}")
+            if (
+                latest_after_execute.status_code == 200
+                and latest_after_execute.json().get("item")
+                and task_after_execute.status_code == 200
+                and task_after_execute.json().get("execution_status") in {"preview", "failed", "executed"}
+            ):
+                ok("task execution persisted latest execution and updated task state")
+            else:
+                fail("task execution did not persist the expected state")
                 failures += 1
 
             create_asset_response = client.post(

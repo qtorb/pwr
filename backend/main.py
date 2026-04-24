@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from db import init_db
 from services.assets import build_asset_reuse_payload, get_asset, get_project_assets, create_asset
-from services.executions import get_execution_history, get_latest_execution_run
+from services.executions import execute_task_now, get_execution_history, get_latest_execution_run
 from services.model_observatory import (
     create_model_run,
     get_model_run,
@@ -267,6 +267,17 @@ def project_create_task(project_id: int, payload: CreateTaskRequest) -> dict[str
 def task_detail(task_id: int) -> dict[str, Any]:
     task = require_task(task_id)
     return row_to_dict(task)
+
+
+@app.post("/api/tasks/{task_id}/execute")
+def task_execute(task_id: int) -> dict[str, Any]:
+    require_task(task_id)
+    try:
+        return execute_task_now(task_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Task execution failed: {exc}") from exc
 
 
 @app.get("/api/tasks/{task_id}/executions")

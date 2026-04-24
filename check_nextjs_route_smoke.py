@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import json
+import shutil
 import socket
 import sqlite3
 import subprocess
@@ -22,6 +23,7 @@ FRONTEND_DIR = ROOT / "frontend-nextjs"
 PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
 BACKEND_HOST = "127.0.0.1"
 DB_PATH = ROOT / "pwr_data" / "pwr.db"
+WINDOWS_SHELL = os.environ.get("ComSpec", r"C:\WINDOWS\system32\cmd.exe")
 
 
 def safe_text(message: str) -> str:
@@ -83,8 +85,22 @@ def cleanup_controlled_task(task_id: int | None) -> None:
     if not task_id:
         return
     with sqlite3.connect(DB_PATH) as conn:
+        rows = conn.execute(
+            "SELECT artifact_md_path, artifact_json_path FROM executions_history WHERE task_id = ?",
+            (task_id,),
+        ).fetchall()
+        conn.execute("DELETE FROM executions_history WHERE task_id = ?", (task_id,))
         conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         conn.commit()
+
+    for row in rows:
+        for rel_path in row:
+            if not rel_path:
+                continue
+            artifact_path = ROOT / str(rel_path).replace("/", os.sep)
+            if artifact_path.exists():
+                with suppress(OSError):
+                    artifact_path.unlink()
 
 
 def terminate_process_tree(proc: subprocess.Popen | None) -> None:
@@ -156,13 +172,15 @@ def main() -> int:
         env = os.environ.copy()
         env["PWR_API_BASE_URL"] = backend_base
         frontend_base = ""
+        home_html = ""
         startup_error = ""
         for _ in range(5):
+            shutil.rmtree(FRONTEND_DIR / ".next", ignore_errors=True)
             frontend_port = free_port(frontend_port, 3299)
             frontend_log_handle = frontend_log.open("w", encoding="utf-8")
             frontend_proc = subprocess.Popen(
                 [
-                    "cmd.exe",
+                    WINDOWS_SHELL,
                     "/c",
                     "npm.cmd",
                     "run",
@@ -179,27 +197,39 @@ def main() -> int:
                 stderr=subprocess.STDOUT,
             )
             frontend_base = f"http://{BACKEND_HOST}:{frontend_port}"
-            time.sleep(2)
+            time.sleep(3)
             frontend_log_handle.close()
             frontend_log_handle = None
-            if frontend_proc.poll() in (None, 0):
-                break
+            if frontend_proc.poll() not in (None, 0):
+                startup_error = safe_text(frontend_log.read_text(encoding="utf-8", errors="replace").strip())
+                terminate_process_tree(frontend_proc)
+                frontend_proc = None
+                if "EADDRINUSE" not in startup_error:
+                    raise RuntimeError(
+                        f"nextjs shell exited early with code 1: {startup_error or '(no output)'}"
+                    )
+                frontend_port += 1
+                continue
 
-            startup_error = safe_text(frontend_log.read_text(encoding="utf-8", errors="replace").strip())
-            terminate_process_tree(frontend_proc)
-            frontend_proc = None
-            if "EADDRINUSE" not in startup_error:
-                raise RuntimeError(
-                    f"nextjs shell exited early with code 1: {startup_error or '(no output)'}"
+            try:
+                home_html = wait_for_http(f"{frontend_base}/", timeout=60.0)
+                ok(f"frontend ready on {frontend_base}")
+                break
+            except Exception as exc:
+                startup_error = safe_text(
+                    frontend_log.read_text(encoding="utf-8", errors="replace").strip()
                 )
-            frontend_port += 1
+                terminate_process_tree(frontend_proc)
+                frontend_proc = None
+                frontend_port += 1
+                if _ == 4:
+                    raise RuntimeError(
+                        f"{frontend_base}/ did not become ready: {exc}\n{startup_error or '(no output)'}"
+                    ) from exc
         else:
             raise RuntimeError(
                 f"nextjs shell could not start after retrying ports: {startup_error or '(no output)'}"
             )
-
-        home_html = wait_for_http(f"{frontend_base}/", timeout=40.0)
-        ok(f"frontend ready on {frontend_base}")
 
         if "Home MVP paralela" in home_html and "Proyectos" in home_html and "Para retomar" in home_html:
             ok("home route renders expected readonly shell content")
@@ -226,7 +256,7 @@ def main() -> int:
         controlled_task_id = int(controlled_task["id"])
         ok(f"created controlled task id={controlled_task_id} for route smoke")
 
-        project_html = wait_for_http(f"{frontend_base}/projects/{project_id}", timeout=40.0)
+        project_html = wait_for_http(f"{frontend_base}/projects/{project_id}", timeout=60.0)
         if (
             "Contexto del proyecto" in project_html
             and "Tareas" in project_html
@@ -239,7 +269,7 @@ def main() -> int:
             fail("project readonly route is missing expected content")
             failures += 1
 
-        task_html = wait_for_http(f"{frontend_base}/tasks/{controlled_task_id}", timeout=40.0)
+        task_html = wait_for_http(f"{frontend_base}/tasks/{controlled_task_id}", timeout=60.0)
         if (
             controlled_task["title"] in task_html
             and "Contexto" in task_html
@@ -247,10 +277,46 @@ def main() -> int:
             and "Output" in task_html
             and "Historial" in task_html
             and f"/projects/{project_id}" in task_html
+            and "Ejecutar ahora" in task_html
         ):
             ok(f"task readonly route renders expected content for task_id={controlled_task_id}")
         else:
             fail("task readonly route is missing expected content")
+            failures += 1
+
+        execute_payload = request_json(f"{backend_base}/api/tasks/{controlled_task_id}/execute", method="POST")
+        next_state = str(execute_payload.get("status") or "").lower()
+        if next_state in {"preview", "failed", "executed"} and execute_payload.get("execution_id"):
+            ok(f"task execute route updates status={next_state} for task_id={controlled_task_id}")
+        else:
+            fail("task execute route did not return a valid execution result")
+            failures += 1
+
+        latest_run = request_json(f"{backend_base}/api/tasks/{controlled_task_id}/executions/latest").get("item")
+        latest_task = request_json(f"{backend_base}/api/tasks/{controlled_task_id}")
+        if latest_run and str(latest_task.get("execution_status") or "").lower() == next_state:
+            ok(f"backend reflects updated task state={next_state}")
+        else:
+            fail("backend state did not update after task execution")
+            failures += 1
+
+        updated_task_html = wait_for_http(
+            f"{frontend_base}/tasks/{controlled_task_id}?updated=1&status={next_state}",
+            timeout=60.0,
+        )
+        expected_button = {
+            "preview": "Continuar",
+            "failed": "Reintentar",
+            "executed": "Ejecutar de nuevo",
+        }.get(next_state, "")
+        if (
+            "Actualizado" in updated_task_html
+            and expected_button in updated_task_html
+            and "Sin ejecuciones todavia" not in updated_task_html
+        ):
+            ok(f"task route refreshes after execution with CTA={expected_button}")
+        else:
+            fail("task route did not refresh with updated execution state")
             failures += 1
 
     except Exception as exc:

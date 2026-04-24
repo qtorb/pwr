@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { getTaskDetailData } from "../../../lib/pwr-api";
+import TaskExecutionPanel from "./task-execution-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,17 @@ function StateBadge({ state }) {
   };
 
   return <span className={`badge ${normalized}`}>{labels[normalized] || normalized}</span>;
+}
+
+function stateCopy(state) {
+  const normalized = String(state || "pending").toLowerCase();
+  return {
+    draft: "Draft",
+    pending: "Pending",
+    preview: "Preview",
+    failed: "Failed",
+    executed: "Executed",
+  }[normalized] || normalized;
 }
 
 function ExecutionHistory({ items }) {
@@ -90,8 +102,9 @@ function OutputPanel({ task, latestExecution }) {
   );
 }
 
-export default async function TaskDetailPage({ params }) {
+export default async function TaskDetailPage({ params, searchParams }) {
   const { taskId } = await params;
+  const resolvedSearchParams = (await searchParams) || {};
   const { apiBaseUrl, task, latestExecution, executions, errors, missing } = await getTaskDetailData(taskId);
 
   if (!task) {
@@ -146,6 +159,7 @@ export default async function TaskDetailPage({ params }) {
   }
 
   const taskState = latestExecution?.execution_status || task.execution_status || task.status || "pending";
+  const updatedState = resolvedSearchParams.updated === "1" ? resolvedSearchParams.status || "" : "";
 
   return (
     <main className="shell">
@@ -186,6 +200,12 @@ export default async function TaskDetailPage({ params }) {
                 ))}
               </ul>
             </div>
+          </section>
+        ) : null}
+
+        {updatedState ? (
+          <section className="feedback-banner ok">
+            Actualizado. Estado actual: {stateCopy(updatedState)}.
           </section>
         ) : null}
 
@@ -265,11 +285,13 @@ export default async function TaskDetailPage({ params }) {
           </div>
 
           <aside className="workspace-side">
+            <TaskExecutionPanel taskId={task.id} currentState={taskState} />
+
             <div className="panel">
               <div className="panel-body stack">
                 <div className="band-head">
                   <h2>Navegacion</h2>
-                  <div className="subtle">Sin acciones mutables</div>
+                  <div className="subtle">Readonly + ejecucion</div>
                 </div>
                 <Link href={`/projects/${task.project_id}`} className="inline-link">
                   Volver al proyecto
