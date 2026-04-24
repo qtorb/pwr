@@ -92,6 +92,25 @@ def main() -> int:
                     "agent_role": "router",
                     "provider": "gemini",
                     "model": "gemini-2.5-pro",
+                    "status": "preview",
+                    "latency_ms": 900,
+                    "input_tokens": 600,
+                    "output_tokens": 140,
+                    "cost_usd": 0.009,
+                    "quality_rating": 4.0,
+                    "converted_to_asset": True,
+                    "reused_later": True,
+                    "metadata_json": {"phase": "check", "case": "preview"},
+                },
+                {
+                    "source_app": "pwr-check",
+                    "project_id": project_id,
+                    "task_id": created_task_id,
+                    "workflow": "retake",
+                    "task_type": "briefing",
+                    "agent_role": "router",
+                    "provider": "gemini",
+                    "model": "gemini-2.5-pro",
                     "status": "failed",
                     "latency_ms": 1800,
                     "input_tokens": 870,
@@ -149,7 +168,8 @@ def main() -> int:
                 fail("model run summary failed")
                 return 1
 
-            summary_items = summary_response.json()["items"]
+            summary_payload = summary_response.json()
+            summary_items = summary_payload["summary"]
             matching = [
                 row
                 for row in summary_items
@@ -157,11 +177,38 @@ def main() -> int:
                 and row["model"] == "gemini-2.5-pro"
                 and row["task_type"] == "briefing"
             ]
-            if matching and int(matching[0]["run_count"]) >= 2:
+            if matching and int(matching[0]["total_runs"]) == 3:
                 ok("model run summary groups by provider/model/task_type")
             else:
                 fail("model run summary did not include the expected grouped row")
                 failures += 1
+
+            if matching:
+                row = matching[0]
+                expected = {
+                    "success_rate": 0.3333,
+                    "preview_rate": 0.3333,
+                    "failed_rate": 0.3333,
+                    "avg_latency_ms": 1300.0,
+                    "avg_cost_usd": 0.016,
+                    "avg_input_tokens": 790.0,
+                    "avg_output_tokens": 153.33,
+                    "conversion_rate": 0.6667,
+                    "reuse_rate": 0.3333,
+                }
+                numeric_failures = [
+                    key
+                    for key, value in expected.items()
+                    if abs(float(row.get(key) or 0.0) - value) > 0.0002
+                ]
+                if not numeric_failures and int(summary_payload.get("total_runs") or 0) >= 3:
+                    ok("model run summary returns the expected rates and averages")
+                else:
+                    fail(
+                        "model run summary metrics differ from the expected values"
+                        + (f": {', '.join(numeric_failures)}" if numeric_failures else "")
+                    )
+                    failures += 1
 
     except Exception as exc:
         fail(f"unexpected error: {type(exc).__name__}: {exc}")

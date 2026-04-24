@@ -220,10 +220,11 @@ def model_runs_summary(
     source_app: str = "",
     workflow: str = "",
 ) -> dict[str, Any]:
-    items = [row_to_dict(row) for row in get_model_run_summary(limit=limit, source_app=source_app, workflow=workflow)]
+    summary = get_model_run_summary(limit=limit, source_app=source_app, workflow=workflow)
     return {
-        "items": items,
-        "total_runs": sum(int(item.get("run_count", 0) or 0) for item in items),
+        "summary": summary,
+        "items": summary,
+        "total_runs": sum(int(item.get("total_runs", 0) or 0) for item in summary),
     }
 
 

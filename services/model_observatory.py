@@ -122,7 +122,7 @@ def get_model_run_summary(
     limit: int = 100,
     source_app: str = "",
     workflow: str = "",
-) -> list[sqlite3.Row]:
+) -> list[dict]:
     where_clauses = ["1 = 1"]
     params: list = []
 
@@ -136,29 +136,70 @@ def get_model_run_summary(
 
     params.append(limit)
     with get_conn() as conn:
-        return conn.execute(
+        rows = conn.execute(
             f"""
             SELECT
                 provider,
                 model,
                 task_type,
-                COUNT(*) AS run_count,
-                ROUND(AVG(COALESCE(latency_ms, 0)), 2) AS avg_latency_ms,
-                ROUND(AVG(COALESCE(cost_usd, 0)), 6) AS avg_cost_usd,
-                ROUND(AVG(COALESCE(input_tokens, 0)), 2) AS avg_input_tokens,
-                ROUND(AVG(COALESCE(output_tokens, 0)), 2) AS avg_output_tokens,
-                SUM(CASE WHEN LOWER(COALESCE(status, '')) IN ('executed', 'success', 'ok') THEN 1 ELSE 0 END) AS success_count,
-                SUM(CASE WHEN LOWER(COALESCE(status, '')) IN ('failed', 'error') THEN 1 ELSE 0 END) AS failure_count,
-                SUM(COALESCE(converted_to_asset, 0)) AS converted_to_asset_count,
-                SUM(COALESCE(reused_later, 0)) AS reused_later_count
+                COUNT(*) AS total_runs,
+                SUM(CASE WHEN LOWER(COALESCE(status, '')) = 'executed' THEN 1 ELSE 0 END) AS executed_count,
+                SUM(CASE WHEN LOWER(COALESCE(status, '')) = 'preview' THEN 1 ELSE 0 END) AS preview_count,
+                SUM(CASE WHEN LOWER(COALESCE(status, '')) = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+                AVG(CASE WHEN latency_ms IS NOT NULL THEN latency_ms END) AS avg_latency_ms,
+                AVG(CASE WHEN cost_usd IS NOT NULL THEN cost_usd END) AS avg_cost_usd,
+                AVG(CASE WHEN input_tokens IS NOT NULL THEN input_tokens END) AS avg_input_tokens,
+                AVG(CASE WHEN output_tokens IS NOT NULL THEN output_tokens END) AS avg_output_tokens,
+                SUM(CASE WHEN COALESCE(converted_to_asset, 0) != 0 THEN 1 ELSE 0 END) AS converted_to_asset_count,
+                SUM(CASE WHEN COALESCE(reused_later, 0) != 0 THEN 1 ELSE 0 END) AS reused_later_count
             FROM model_runs
             WHERE {' AND '.join(where_clauses)}
             GROUP BY provider, model, task_type
-            ORDER BY run_count DESC, provider ASC, model ASC, task_type ASC
+            ORDER BY total_runs DESC, provider ASC, model ASC, task_type ASC
             LIMIT ?
             """,
             tuple(params),
         ).fetchall()
+
+    summary: list[dict] = []
+    for row in rows:
+        total_runs = int(row_value(row, "total_runs", 0) or 0)
+        executed_count = int(row_value(row, "executed_count", 0) or 0)
+        preview_count = int(row_value(row, "preview_count", 0) or 0)
+        failed_count = int(row_value(row, "failed_count", 0) or 0)
+        converted_count = int(row_value(row, "converted_to_asset_count", 0) or 0)
+        reused_count = int(row_value(row, "reused_later_count", 0) or 0)
+        denominator = float(total_runs or 0)
+
+        def ratio(value: int) -> float:
+            if denominator <= 0:
+                return 0.0
+            return round(float(value) / denominator, 4)
+
+        def metric(value, digits: int):
+            if value is None:
+                return None
+            return round(float(value), digits)
+
+        summary.append(
+            {
+                "provider": row_value(row, "provider"),
+                "model": row_value(row, "model"),
+                "task_type": row_value(row, "task_type"),
+                "total_runs": total_runs,
+                "success_rate": ratio(executed_count),
+                "preview_rate": ratio(preview_count),
+                "failed_rate": ratio(failed_count),
+                "avg_latency_ms": metric(row_value(row, "avg_latency_ms", None), 2),
+                "avg_cost_usd": metric(row_value(row, "avg_cost_usd", None), 6),
+                "avg_input_tokens": metric(row_value(row, "avg_input_tokens", None), 2),
+                "avg_output_tokens": metric(row_value(row, "avg_output_tokens", None), 2),
+                "conversion_rate": ratio(converted_count),
+                "reuse_rate": ratio(reused_count),
+            }
+        )
+
+    return summary
 
 
 def delete_model_runs(run_ids: list[int]) -> None:
