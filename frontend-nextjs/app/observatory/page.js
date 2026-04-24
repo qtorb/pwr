@@ -9,13 +9,32 @@ function formatRate(value) {
 }
 
 function formatNumber(value, digits = 2) {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "-";
   return Number(value).toFixed(digits);
+}
+
+function formatTaskType(value) {
+  return value || "generic";
+}
+
+function BestHintCard({ hint }) {
+  return (
+    <div className="summary-pill" key={`${hint.provider}-${hint.model}-${hint.task_type}`}>
+      <strong>{hint.model || "-"}</strong>
+      <span>{hint.provider || "-"} · {formatTaskType(hint.task_type)}</span>
+      <span>score {formatNumber(hint.score, 4)} · confianza {hint.confidence || "-"}</span>
+      <span>
+        quality {formatNumber(hint.quality_score, 4)} · cost {formatNumber(hint.cost_efficiency, 4)} · latency{" "}
+        {formatNumber(hint.latency_efficiency, 4)} · reliability {formatNumber(hint.reliability_score, 4)}
+      </span>
+      <span>{hint.reason || "Sin motivo disponible."}</span>
+    </div>
+  );
 }
 
 export default async function ObservatoryPage() {
   try {
-    const { apiBaseUrl, summary, totalRuns } = await getModelObservatorySummaryData();
+    const { apiBaseUrl, summary, bestHints, totalRuns } = await getModelObservatorySummaryData();
 
     return (
       <main className="shell">
@@ -37,9 +56,7 @@ export default async function ObservatoryPage() {
               <span>Observatorio</span>
             </div>
             <h1>Model Observatory</h1>
-            <p>
-              Vista minima para entender que modelos convierten mejor el trabajo real en activos reutilizables.
-            </p>
+            <p>Aprendizaje observable sobre uso de modelos. No ejecuta routing automatico.</p>
             <div className="subtle">API base actual: {apiBaseUrl}</div>
             <div className="subtle">Runs visibles en el resumen: {totalRuns}</div>
           </section>
@@ -48,11 +65,11 @@ export default async function ObservatoryPage() {
             <div className="panel-body">
               <div className="band-head">
                 <h2>Resumen por modelo</h2>
-                <div className="subtle">Ordenado por conversion y reutilizacion</div>
+                <div className="subtle">Metricas observadas sobre uso real y conversion en activos.</div>
               </div>
 
               {!summary.length ? (
-                <div className="muted-box">No hay datos todavia</div>
+                <div className="muted-box">Todavia no hay suficientes ejecuciones observadas.</div>
               ) : (
                 <div className="table-wrap">
                   <table className="data-table">
@@ -63,6 +80,10 @@ export default async function ObservatoryPage() {
                         <th>task_type</th>
                         <th>total_runs</th>
                         <th>success_rate</th>
+                        <th>preview_rate</th>
+                        <th>failed_rate</th>
+                        <th>avg_latency_ms</th>
+                        <th>avg_cost_usd</th>
                         <th>conversion_rate</th>
                         <th>reuse_rate</th>
                       </tr>
@@ -70,11 +91,15 @@ export default async function ObservatoryPage() {
                     <tbody>
                       {summary.map((row) => (
                         <tr key={`${row.provider}-${row.model}-${row.task_type}`}>
-                          <td>{row.provider || "—"}</td>
-                          <td>{row.model || "—"}</td>
-                          <td>{row.task_type || "—"}</td>
+                          <td>{row.provider || "-"}</td>
+                          <td>{row.model || "-"}</td>
+                          <td>{formatTaskType(row.task_type)}</td>
                           <td>{row.total_runs || 0}</td>
                           <td>{formatRate(row.success_rate)}</td>
+                          <td>{formatRate(row.preview_rate)}</td>
+                          <td>{formatRate(row.failed_rate)}</td>
+                          <td>{formatNumber(row.avg_latency_ms, 0)}</td>
+                          <td>{formatNumber(row.avg_cost_usd, 6)}</td>
                           <td>{formatRate(row.conversion_rate)}</td>
                           <td>{formatRate(row.reuse_rate)}</td>
                         </tr>
@@ -86,30 +111,24 @@ export default async function ObservatoryPage() {
             </div>
           </section>
 
-          {summary.length ? (
+          {bestHints.length ? (
             <section className="panel">
               <div className="panel-body">
                 <div className="band-head">
-                  <h2>Lectura rapida</h2>
-                  <div className="subtle">Sin analitica avanzada</div>
+                  <h2>Best hints</h2>
+                  <div className="subtle">Hints experimentales por task_type. No cambian el routing real.</div>
                 </div>
                 <div className="summary-grid">
-                  <div className="summary-pill">
-                    <strong>{summary[0].model || "—"}</strong>
-                    <span>
-                      Mejor posicionado por conversion ({formatRate(summary[0].conversion_rate)}) y reutilizacion (
-                      {formatRate(summary[0].reuse_rate)}).
-                    </span>
-                  </div>
-                  <div className="summary-pill">
-                    <strong>{formatNumber(summary[0].avg_cost_usd, 6)}</strong>
-                    <span>Coste medio observado para el primer grupo</span>
-                  </div>
-                  <div className="summary-pill">
-                    <strong>{formatNumber(summary[0].avg_latency_ms, 0)}</strong>
-                    <span>Latencia media observada para el primer grupo</span>
-                  </div>
+                  {bestHints.map((hint) => (
+                    <BestHintCard hint={hint} key={`${hint.provider}-${hint.model}-${hint.task_type}`} />
+                  ))}
                 </div>
+              </div>
+            </section>
+          ) : summary.length ? (
+            <section className="panel">
+              <div className="panel-body">
+                <div className="muted-box">Todavia no hay hints experimentales suficientes para mostrar.</div>
               </div>
             </section>
           ) : null}
@@ -137,7 +156,7 @@ export default async function ObservatoryPage() {
               <span>Observatorio</span>
             </div>
             <h1>Model Observatory</h1>
-            <p>No fue posible cargar el resumen del observatorio con la API actual.</p>
+            <p>No fue posible cargar el observatorio con la API actual.</p>
           </section>
 
           <section className="panel">
