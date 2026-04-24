@@ -232,23 +232,42 @@ def get_model_run_summary(
         rows = conn.execute(
             f"""
             SELECT
-                provider,
-                model,
-                task_type,
+                mr.provider,
+                mr.model,
+                mr.task_type,
                 COUNT(*) AS total_runs,
-                SUM(CASE WHEN LOWER(COALESCE(status, '')) = 'executed' THEN 1 ELSE 0 END) AS executed_count,
-                SUM(CASE WHEN LOWER(COALESCE(status, '')) = 'preview' THEN 1 ELSE 0 END) AS preview_count,
-                SUM(CASE WHEN LOWER(COALESCE(status, '')) = 'failed' THEN 1 ELSE 0 END) AS failed_count,
-                AVG(CASE WHEN latency_ms IS NOT NULL THEN latency_ms END) AS avg_latency_ms,
-                AVG(CASE WHEN cost_usd IS NOT NULL THEN cost_usd END) AS avg_cost_usd,
-                AVG(CASE WHEN input_tokens IS NOT NULL THEN input_tokens END) AS avg_input_tokens,
-                AVG(CASE WHEN output_tokens IS NOT NULL THEN output_tokens END) AS avg_output_tokens,
-                SUM(CASE WHEN COALESCE(converted_to_asset, 0) != 0 THEN 1 ELSE 0 END) AS converted_to_asset_count,
-                SUM(CASE WHEN COALESCE(reused_later, 0) != 0 THEN 1 ELSE 0 END) AS reused_later_count
-            FROM model_runs
-            WHERE {' AND '.join(where_clauses)}
-            GROUP BY provider, model, task_type
-            ORDER BY total_runs DESC, provider ASC, model ASC, task_type ASC
+                SUM(CASE WHEN LOWER(COALESCE(mr.status, '')) = 'executed' THEN 1 ELSE 0 END) AS executed_count,
+                SUM(CASE WHEN LOWER(COALESCE(mr.status, '')) = 'preview' THEN 1 ELSE 0 END) AS preview_count,
+                SUM(CASE WHEN LOWER(COALESCE(mr.status, '')) = 'failed' THEN 1 ELSE 0 END) AS failed_count,
+                AVG(CASE WHEN mr.latency_ms IS NOT NULL THEN mr.latency_ms END) AS avg_latency_ms,
+                AVG(CASE WHEN mr.cost_usd IS NOT NULL THEN mr.cost_usd END) AS avg_cost_usd,
+                AVG(CASE WHEN mr.input_tokens IS NOT NULL THEN mr.input_tokens END) AS avg_input_tokens,
+                AVG(CASE WHEN mr.output_tokens IS NOT NULL THEN mr.output_tokens END) AS avg_output_tokens,
+                SUM(CASE WHEN COALESCE(mr.converted_to_asset, 0) != 0 THEN 1 ELSE 0 END) AS converted_to_asset_count,
+                SUM(CASE WHEN COALESCE(mr.reused_later, 0) != 0 THEN 1 ELSE 0 END) AS reused_later_count,
+                COALESCE(MAX(mf.feedback_useful_count), 0) AS feedback_useful_count,
+                COALESCE(MAX(mf.feedback_not_useful_count), 0) AS feedback_not_useful_count,
+                COALESCE(MAX(mf.feedback_used_other_count), 0) AS feedback_used_other_count,
+                COALESCE(MAX(mf.feedback_total), 0) AS feedback_total
+            FROM model_runs mr
+            LEFT JOIN (
+                SELECT
+                    provider,
+                    model,
+                    task_type,
+                    SUM(CASE WHEN feedback = 'useful' THEN 1 ELSE 0 END) AS feedback_useful_count,
+                    SUM(CASE WHEN feedback = 'not_useful' THEN 1 ELSE 0 END) AS feedback_not_useful_count,
+                    SUM(CASE WHEN feedback = 'used_other' THEN 1 ELSE 0 END) AS feedback_used_other_count,
+                    COUNT(*) AS feedback_total
+                FROM model_feedback
+                GROUP BY provider, model, task_type
+            ) mf
+                ON COALESCE(mf.provider, '') = COALESCE(mr.provider, '')
+               AND COALESCE(mf.model, '') = COALESCE(mr.model, '')
+               AND COALESCE(mf.task_type, '') = COALESCE(mr.task_type, '')
+            WHERE {' AND '.join(f'mr.{clause}' if clause != '1 = 1' else clause for clause in where_clauses)}
+            GROUP BY mr.provider, mr.model, mr.task_type
+            ORDER BY total_runs DESC, mr.provider ASC, mr.model ASC, mr.task_type ASC
             LIMIT ?
             """,
             tuple(params),
@@ -289,6 +308,10 @@ def get_model_run_summary(
                 "avg_output_tokens": metric(row_value(row, "avg_output_tokens", None), 2),
                 "conversion_rate": ratio(converted_count),
                 "reuse_rate": ratio(reused_count),
+                "feedback_useful_count": int(row_value(row, "feedback_useful_count", 0) or 0),
+                "feedback_not_useful_count": int(row_value(row, "feedback_not_useful_count", 0) or 0),
+                "feedback_used_other_count": int(row_value(row, "feedback_used_other_count", 0) or 0),
+                "feedback_total": int(row_value(row, "feedback_total", 0) or 0),
             }
         )
 

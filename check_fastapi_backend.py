@@ -172,6 +172,20 @@ def main() -> int:
                 fail("task execution did not create the expected model_run")
                 failures += 1
 
+            summary_before_feedback = client.get("/api/model-runs/summary").json().get("summary", [])
+            matching_before_feedback = next(
+                (
+                    row
+                    for row in summary_before_feedback
+                    if row.get("provider") == (related_runs[0]["provider"] if related_runs else "gemini")
+                    and row.get("model") == (related_runs[0]["model"] if related_runs else "gemini-2.5-flash-lite")
+                    and row.get("task_type") == (created_task.get("task_type") or "generic")
+                ),
+                None,
+            )
+            useful_before = int((matching_before_feedback or {}).get("feedback_useful_count") or 0)
+            total_before = int((matching_before_feedback or {}).get("feedback_total") or 0)
+
             feedback_response = client.post(
                 "/api/model-feedback",
                 json={
@@ -185,15 +199,29 @@ def main() -> int:
                 },
             )
             feedback_rows = list_model_feedback(task_id=created_task_id, limit=10)
+            summary_after_feedback = client.get("/api/model-runs/summary").json().get("summary", [])
+            matching_after_feedback = next(
+                (
+                    row
+                    for row in summary_after_feedback
+                    if row.get("provider") == (related_runs[0]["provider"] if related_runs else "gemini")
+                    and row.get("model") == (related_runs[0]["model"] if related_runs else "gemini-2.5-flash-lite")
+                    and row.get("task_type") == (created_task.get("task_type") or "generic")
+                ),
+                None,
+            )
             if (
                 feedback_response.status_code == 200
                 and feedback_response.json().get("feedback") == "useful"
                 and feedback_rows
                 and feedback_rows[0]["feedback"] == "useful"
+                and matching_after_feedback
+                and int(matching_after_feedback.get("feedback_useful_count") or 0) == useful_before + 1
+                and int(matching_after_feedback.get("feedback_total") or 0) == total_before + 1
             ):
-                ok("model feedback endpoint persists hint feedback")
+                ok("model feedback endpoint persists hint feedback and summary reflects it")
             else:
-                fail("model feedback endpoint did not persist the expected feedback")
+                fail("model feedback endpoint did not persist the expected feedback in summary")
                 failures += 1
 
             create_asset_response = client.post(

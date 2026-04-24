@@ -22,6 +22,8 @@ def fail(message: str) -> None:
 
 def cleanup(run_ids: list[int], task_id: int | None) -> None:
     with get_conn() as conn:
+        if task_id:
+            conn.execute("DELETE FROM model_feedback WHERE task_id = ?", (task_id,))
         if run_ids:
             placeholders = ", ".join(["?"] * len(run_ids))
             conn.execute(f"DELETE FROM model_runs WHERE id IN ({placeholders})", tuple(run_ids))
@@ -336,6 +338,42 @@ def main() -> int:
                 created_run_ids.append(int(created["id"]))
             ok(f"registered {len(created_run_ids)} model run(s)")
 
+            feedback_payloads = [
+                {
+                    "task_id": created_task_id,
+                    "task_type": "briefing",
+                    "provider": "gemini",
+                    "model": "gemini-2.5-pro",
+                    "score": 0.71,
+                    "confidence": "low",
+                    "feedback": "useful",
+                },
+                {
+                    "task_id": created_task_id,
+                    "task_type": "briefing",
+                    "provider": "gemini",
+                    "model": "gemini-2.5-pro",
+                    "score": 0.71,
+                    "confidence": "low",
+                    "feedback": "not_useful",
+                },
+                {
+                    "task_id": created_task_id,
+                    "task_type": "briefing",
+                    "provider": "gemini",
+                    "model": "gemini-2.5-pro",
+                    "score": 0.71,
+                    "confidence": "low",
+                    "feedback": "used_other",
+                },
+            ]
+            for payload in feedback_payloads:
+                response = client.post("/api/model-feedback", json=payload)
+                if response.status_code != 200:
+                    fail("model feedback creation failed")
+                    return 1
+            ok(f"registered {len(feedback_payloads)} model feedback row(s)")
+
             with get_conn() as conn:
                 conn.execute(
                     "UPDATE model_runs SET created_at = ? WHERE id = ?",
@@ -398,6 +436,10 @@ def main() -> int:
                     "avg_output_tokens": 153.33,
                     "conversion_rate": 0.6667,
                     "reuse_rate": 0.3333,
+                    "feedback_useful_count": 1,
+                    "feedback_not_useful_count": 1,
+                    "feedback_used_other_count": 1,
+                    "feedback_total": 3,
                 }
                 numeric_failures = [
                     key

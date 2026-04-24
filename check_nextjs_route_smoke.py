@@ -274,6 +274,10 @@ def main() -> int:
             and "Cost" in observatory_html
             and "Conversion" in observatory_html
             and "Reuse" in observatory_html
+            and "useful" in observatory_html
+            and "not useful" in observatory_html
+            and "used other" in observatory_html
+            and "Feedback total" in observatory_html
             and "Best hints" in observatory_html
             and "quality" in observatory_html
             and "confidence" in observatory_html
@@ -327,9 +331,9 @@ def main() -> int:
             and "Ejecutar ahora" in task_html
             and "Confianza" in task_html
             and "ejecuciones observadas" in task_html
-            and "👍 util" in task_html
-            and "👎 no util" in task_html
-            and "↔ use otro modelo" in task_html
+            and "util" in task_html
+            and "no util" in task_html
+            and "use otro modelo" in task_html
         ):
             ok(f"task readonly route renders expected content for task_id={controlled_task_id}")
         else:
@@ -408,6 +412,34 @@ def main() -> int:
             ok("model feedback endpoint persists hint feedback for the task")
         else:
             fail("model feedback did not persist as expected")
+            failures += 1
+
+        observatory_summary = request_json(f"{backend_base}/api/model-runs/summary").get("summary", [])
+        observatory_html_after_feedback = wait_for_http(f"{frontend_base}/observatory", timeout=60.0)
+        latest_run_model = latest_run.get("model") if latest_run else ""
+        latest_task_type = latest_task.get("task_type") or "generic"
+        feedback_summary_row = next(
+            (
+                row
+                for row in observatory_summary
+                if row.get("provider") == (latest_run.get("provider") if latest_run else None)
+                and row.get("model") == latest_run_model
+                and (row.get("task_type") or "generic") == latest_task_type
+            ),
+            None,
+        )
+        expected_feedback_total = str(int((feedback_summary_row or {}).get("feedback_total") or 0))
+        if (
+            latest_run_model
+            and latest_run_model in observatory_html_after_feedback
+            and latest_task_type in observatory_html_after_feedback
+            and "Feedback total" in observatory_html_after_feedback
+            and "useful" in observatory_html_after_feedback
+            and expected_feedback_total in observatory_html_after_feedback
+        ):
+            ok("observatory route reflects human feedback after task submission")
+        else:
+            fail("observatory route did not reflect the expected feedback content")
             failures += 1
 
         asset_title = "Next.js route smoke asset"

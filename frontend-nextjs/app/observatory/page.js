@@ -90,6 +90,16 @@ export default async function ObservatoryPage() {
                         <th className="num">Cost</th>
                         <th className="num">Conversion</th>
                         <th className="num">Reuse</th>
+                        <th className="num">
+                          <span aria-hidden="true">👍</span> useful
+                        </th>
+                        <th className="num">
+                          <span aria-hidden="true">👎</span> not useful
+                        </th>
+                        <th className="num">
+                          <span aria-hidden="true">↔</span> used other
+                        </th>
+                        <th className="num">Feedback total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -102,10 +112,18 @@ export default async function ObservatoryPage() {
                           <td className="num">{formatRate(row.success_rate)}</td>
                           <td className="num">{formatRate(row.preview_rate)}</td>
                           <td className="num">{formatRate(row.failed_rate)}</td>
-                          <td className="num">{row.avg_latency_ms === null || row.avg_latency_ms === undefined ? "-" : `${formatNumber(row.avg_latency_ms, 0)} ms`}</td>
+                          <td className="num">
+                            {row.avg_latency_ms === null || row.avg_latency_ms === undefined
+                              ? "-"
+                              : `${formatNumber(row.avg_latency_ms, 0)} ms`}
+                          </td>
                           <td className="num">{formatNumber(row.avg_cost_usd, 3)}</td>
                           <td className="num">{formatRate(row.conversion_rate)}</td>
                           <td className="num">{formatRate(row.reuse_rate)}</td>
+                          <td className="num">{formatNumber(row.feedback_useful_count, 0)}</td>
+                          <td className="num">{formatNumber(row.feedback_not_useful_count, 0)}</td>
+                          <td className="num">{formatNumber(row.feedback_used_other_count, 0)}</td>
+                          <td className="num">{formatNumber(row.feedback_total, 0)}</td>
                         </tr>
                       ))}
                     </tbody>
