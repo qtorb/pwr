@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import AppHeader from "./_components/app-header";
 import { getShellHomeData } from "../lib/pwr-api";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ function TaskList({ items, emptyMessage }) {
   return (
     <div className="list">
       {items.map((item) => (
-        <div className="row" key={`${item.project_id}-${item.id}`}>
+        <Link className="row row-link" key={`${item.project_id}-${item.id}`} href={`/tasks/${item.id}`}>
           <div className="row-top">
             <div className="row-title">{item.title || "Tarea sin titulo"}</div>
             <StateBadge state={item.execution_status} />
@@ -48,7 +49,7 @@ function TaskList({ items, emptyMessage }) {
             <span>{formatDate(item.updated_at)}</span>
             {item.suggested_model ? <span>{item.suggested_model}</span> : null}
           </div>
-        </div>
+        </Link>
       ))}
     </div>
   );
@@ -84,31 +85,32 @@ export default async function HomePage() {
 
   return (
     <main className="shell">
-      <header className="topbar">
-        <div className="topbar-inner">
-          <div className="brand-block">
-            <div className="brand">PWR</div>
-            <div className="subtle">Next.js shell paralela sobre FastAPI</div>
-          </div>
-          <div className={`status-chip ${health?.status === "ok" ? "ok" : ""}`}>
-            API {health?.status === "ok" ? "conectada" : "no disponible"}
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        subtitle="Shell operativa sobre FastAPI para uso real"
+        statusText={`API ${health?.status === "ok" ? "conectada" : "no disponible"}`}
+        statusTone={health?.status === "ok" ? "ok" : "default"}
+      />
 
       <div className="page">
-        <section className="hero">
-          <h1>Home MVP paralela</h1>
-          <p>
-            Esta shell demuestra que PWR ya puede vivir fuera de Streamlit sin duplicar logica.
-            Home consume FastAPI directamente y mantiene a Streamlit como runtime principal durante la transicion.
-          </p>
-          <div className="subtle">API base actual: {apiBaseUrl}</div>
-          <div>
-            <Link href="/observatory" className="inline-link">
-              Observatorio
+        <section className="hero hero-home">
+          <div className="hero-copy">
+            <h1>PWR listo para dogfooding</h1>
+            <p>
+              La shell Next.js ya cubre el loop principal sin duplicar la logica del producto. Esta capa
+              esta pensada para usar PWR varias veces al dia con menos friccion y mas calma visual.
+            </p>
+            <div className="subtle">API base actual: {apiBaseUrl}</div>
+          </div>
+
+          <div className="hero-actions">
+            <Link href="/tasks" className="hero-primary">
+              Crear tarea
+            </Link>
+            <Link href="/observatory" className="hero-secondary">
+              Ver observatory
             </Link>
           </div>
+
           {errors.length ? (
             <div className="muted-box">
               Se detectaron respuestas incompletas desde la API:
@@ -123,8 +125,8 @@ export default async function HomePage() {
 
         <section className="band">
           <div className="band-head">
-            <h2>Home</h2>
-            <div className="subtle">Primera shell Next.js centrada en actividad, reentrada y proyectos.</div>
+            <h2>Entrada</h2>
+            <div className="subtle">Actividad reciente, reentrada y proyectos en una sola pantalla calmada.</div>
           </div>
           <div className="grid home">
             <div className="panel">

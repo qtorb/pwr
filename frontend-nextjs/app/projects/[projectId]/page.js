@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import AppHeader from "../../_components/app-header";
 import { getProjectWorkspaceData } from "../../../lib/pwr-api";
 
 export const dynamic = "force-dynamic";
@@ -97,27 +98,21 @@ export default async function ProjectWorkspacePage({ params }) {
 
   return (
     <main className="shell">
-      <header className="topbar">
-        <div className="topbar-inner">
-          <div className="brand-block">
-            <div className="brand">PWR</div>
-            <div className="subtle">Project workspace readonly desde Next.js</div>
-          </div>
-          <div className="status-chip ok">API conectada</div>
-        </div>
-      </header>
+      <AppHeader subtitle="Workspace de proyecto en modo lectura" statusText="API conectada" statusTone="ok" />
 
       <div className="page">
         <section className="hero">
           <div className="breadcrumbs">
             <Link href="/">Home</Link>
             <span>/</span>
+            <Link href="/tasks">Tasks</Link>
+            <span>/</span>
             <span>{project.name}</span>
           </div>
           <h1>{project.name}</h1>
           <p>
-            Primera vista de proyecto en modo solo lectura. Streamlit sigue vivo; esta shell solo demuestra
-            que proyecto, tareas y activos ya pueden consumirse desde FastAPI.
+            Vista de proyecto en modo solo lectura. La shell ya deja ver contexto, tareas y activos con una
+            estructura mas calmada y apta para uso repetido.
           </p>
           <div className="subtle">API base actual: {apiBaseUrl}</div>
         </section>
@@ -145,8 +140,8 @@ export default async function ProjectWorkspacePage({ params }) {
                 </div>
                 <div className="stack">
                   <div className="info-block">
-                    <div className="label">Descripción</div>
-                    <div>{project.description || "Sin descripción definida."}</div>
+                    <div className="label">Descripcion</div>
+                    <div>{project.description || "Sin descripcion definida."}</div>
                   </div>
                   <div className="info-block">
                     <div className="label">Objetivo</div>
