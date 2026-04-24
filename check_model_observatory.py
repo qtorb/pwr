@@ -142,6 +142,101 @@ def main() -> int:
                     "reused_later": True,
                     "metadata_json": {"phase": "check", "case": "secondary"},
                 },
+                {
+                    "source_app": "pwr-check",
+                    "project_id": project_id,
+                    "task_id": created_task_id,
+                    "workflow": "retake",
+                    "task_type": "compare",
+                    "agent_role": "router",
+                    "provider": "gemini",
+                    "model": "gemini-2.5-pro",
+                    "status": "preview",
+                    "latency_ms": 2500,
+                    "input_tokens": 800,
+                    "output_tokens": 200,
+                    "cost_usd": 0.04,
+                    "quality_rating": 4.2,
+                    "converted_to_asset": True,
+                    "reused_later": True,
+                    "metadata_json": {"phase": "check", "case": "compare-expensive-good"},
+                },
+                {
+                    "source_app": "pwr-check",
+                    "project_id": project_id,
+                    "task_id": created_task_id,
+                    "workflow": "retake",
+                    "task_type": "compare",
+                    "agent_role": "router",
+                    "provider": "gemini",
+                    "model": "gemini-2.5-pro",
+                    "status": "failed",
+                    "latency_ms": 2500,
+                    "input_tokens": 800,
+                    "output_tokens": 0,
+                    "cost_usd": 0.04,
+                    "quality_rating": None,
+                    "converted_to_asset": False,
+                    "reused_later": False,
+                    "metadata_json": {"phase": "check", "case": "compare-expensive-bad"},
+                },
+                {
+                    "source_app": "pwr-check",
+                    "project_id": project_id,
+                    "task_id": created_task_id,
+                    "workflow": "retake",
+                    "task_type": "compare",
+                    "agent_role": "router",
+                    "provider": "gemini",
+                    "model": "gemini-2.5-flash-lite",
+                    "status": "preview",
+                    "latency_ms": 600,
+                    "input_tokens": 800,
+                    "output_tokens": 200,
+                    "cost_usd": 0.005,
+                    "quality_rating": 4.0,
+                    "converted_to_asset": True,
+                    "reused_later": True,
+                    "metadata_json": {"phase": "check", "case": "compare-cheap-good"},
+                },
+                {
+                    "source_app": "pwr-check",
+                    "project_id": project_id,
+                    "task_id": created_task_id,
+                    "workflow": "retake",
+                    "task_type": "compare",
+                    "agent_role": "router",
+                    "provider": "gemini",
+                    "model": "gemini-2.5-flash-lite",
+                    "status": "failed",
+                    "latency_ms": 600,
+                    "input_tokens": 800,
+                    "output_tokens": 0,
+                    "cost_usd": 0.005,
+                    "quality_rating": None,
+                    "converted_to_asset": False,
+                    "reused_later": False,
+                    "metadata_json": {"phase": "check", "case": "compare-cheap-bad"},
+                },
+                {
+                    "source_app": "pwr-check",
+                    "project_id": project_id,
+                    "task_id": created_task_id,
+                    "workflow": "retake",
+                    "task_type": "no-metrics",
+                    "agent_role": "router",
+                    "provider": "openai",
+                    "model": "gpt-5.4-mini",
+                    "status": "preview",
+                    "latency_ms": 0,
+                    "input_tokens": 400,
+                    "output_tokens": 150,
+                    "cost_usd": 0.0,
+                    "quality_rating": 3.5,
+                    "converted_to_asset": True,
+                    "reused_later": False,
+                    "metadata_json": {"phase": "check", "case": "no-metrics"},
+                },
             ]
 
             for payload in payloads:
@@ -241,11 +336,15 @@ def main() -> int:
                 and recommended.get("provider") == "gemini"
                 and recommended.get("model") == "gemini-2.5-pro"
                 and recommended.get("task_type") == "briefing"
-                and abs(float(recommended.get("score") or 0.0) - 0.6762) <= 0.0002
+                and abs(float(recommended.get("score") or 0.0) - 0.7572) <= 0.0002
+                and abs(float(recommended.get("quality_score") or 0.0) - 0.6762) <= 0.0002
+                and abs(float(recommended.get("cost_efficiency") or 0.0) - 1.0) <= 0.0002
+                and abs(float(recommended.get("latency_efficiency") or 0.0) - 1.0) <= 0.0002
                 and int(recommended.get("total_runs") or 0) == 3
                 and recommended.get("confidence") == "low"
-                and "conversion=" in str(recommended.get("reason") or "")
-                and "reuse=" in str(recommended.get("reason") or "")
+                and "quality=" in str(recommended.get("reason") or "")
+                and "cost_efficiency=1.0000" in str(recommended.get("reason") or "")
+                and "latency_efficiency=1.0000" in str(recommended.get("reason") or "")
                 and "runs=3" in str(recommended.get("reason") or "")
                 and "confidence=low" in str(recommended.get("reason") or "")
                 and "recent_weighting=enabled" in str(recommended.get("reason") or "")
@@ -265,12 +364,52 @@ def main() -> int:
                 fallback_recommended
                 and fallback_recommended.get("provider") == "openai"
                 and fallback_recommended.get("model") == "gpt-5.4-mini"
-                and abs(float(fallback_recommended.get("score") or 0.0) - 0.4) <= 0.0002
+                and abs(float(fallback_recommended.get("score") or 0.0) - 0.55) <= 0.0002
                 and "recent_weighting=fallback" in str(fallback_recommended.get("reason") or "")
             ):
                 ok("best model hint falls back cleanly when timestamps are invalid")
             else:
                 fail("best model hint did not fall back as expected for invalid timestamps")
+                failures += 1
+
+            efficient_best_response = client.get("/api/model-runs/best", params={"task_type": "compare"})
+            if efficient_best_response.status_code != 200:
+                fail("best model hint efficiency endpoint failed")
+                return 1
+
+            efficient_recommended = efficient_best_response.json().get("recommended")
+            if (
+                efficient_recommended
+                and efficient_recommended.get("provider") == "gemini"
+                and efficient_recommended.get("model") == "gemini-2.5-flash-lite"
+                and abs(float(efficient_recommended.get("quality_score") or 0.0) - 0.5) <= 0.0002
+                and abs(float(efficient_recommended.get("cost_efficiency") or 0.0) - 1.0) <= 0.0002
+                and abs(float(efficient_recommended.get("latency_efficiency") or 0.0) - 1.0) <= 0.0002
+                and abs(float(efficient_recommended.get("score") or 0.0) - 0.625) <= 0.0002
+            ):
+                ok("best model hint prefers the cheaper and faster model when quality is similar")
+            else:
+                fail("best model hint did not incorporate cost and latency efficiency as expected")
+                failures += 1
+
+            no_metrics_response = client.get("/api/model-runs/best", params={"task_type": "no-metrics"})
+            if no_metrics_response.status_code != 200:
+                fail("best model hint neutral fallback endpoint failed")
+                return 1
+
+            no_metrics_recommended = no_metrics_response.json().get("recommended")
+            if (
+                no_metrics_recommended
+                and no_metrics_recommended.get("provider") == "openai"
+                and no_metrics_recommended.get("model") == "gpt-5.4-mini"
+                and abs(float(no_metrics_recommended.get("cost_efficiency") or 0.0) - 1.0) <= 0.0002
+                and abs(float(no_metrics_recommended.get("latency_efficiency") or 0.0) - 1.0) <= 0.0002
+                and "cost_efficiency=1.0000" in str(no_metrics_recommended.get("reason") or "")
+                and "latency_efficiency=1.0000" in str(no_metrics_recommended.get("reason") or "")
+            ):
+                ok("best model hint uses neutral efficiency when cost or latency is missing")
+            else:
+                fail("best model hint did not apply neutral efficiency fallback for missing metrics")
                 failures += 1
 
             empty_best_response = client.get("/api/model-runs/best", params={"task_type": "nonexistent"})

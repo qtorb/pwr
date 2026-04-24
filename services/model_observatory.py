@@ -277,7 +277,31 @@ def get_best_model_hint(
             return None, False
         return round(weighted_hits / weighted_total, 4), True
 
-    def candidate_rates(row: dict) -> tuple[float, float, bool]:
+    def positive_metric(row: dict, field_name: str) -> float | None:
+        try:
+            value = float(row.get(field_name)) if row.get(field_name) is not None else None
+        except (TypeError, ValueError):
+            return None
+        if value is None or value <= 0:
+            return None
+        return value
+
+    valid_costs = [
+        value
+        for row in candidates
+        for value in [positive_metric(row, "avg_cost_usd")]
+        if value is not None
+    ]
+    valid_latencies = [
+        value
+        for row in candidates
+        for value in [positive_metric(row, "avg_latency_ms")]
+        if value is not None
+    ]
+    min_cost = min(valid_costs) if valid_costs else None
+    min_latency = min(valid_latencies) if valid_latencies else None
+
+    def candidate_metrics(row: dict) -> tuple[float, float, float, bool]:
         key = (
             str(row.get("provider") or "").strip(),
             str(row.get("model") or "").strip(),
@@ -287,18 +311,34 @@ def get_best_model_hint(
         weighted_conversion_rate, conversion_weighted = weighted_binary_rate(rows, "converted_to_asset")
         weighted_reuse_rate, reuse_weighted = weighted_binary_rate(rows, "reused_later")
         if conversion_weighted and reuse_weighted:
-            return float(weighted_conversion_rate or 0.0), float(weighted_reuse_rate or 0.0), True
-        return (
-            float(row.get("conversion_rate") or 0.0),
-            float(row.get("reuse_rate") or 0.0),
-            False,
+            conversion_rate = float(weighted_conversion_rate or 0.0)
+            reuse_rate = float(weighted_reuse_rate or 0.0)
+            weighting_enabled = True
+        else:
+            conversion_rate = float(row.get("conversion_rate") or 0.0)
+            reuse_rate = float(row.get("reuse_rate") or 0.0)
+            weighting_enabled = False
+
+        quality_score = round((conversion_rate * 0.6) + (reuse_rate * 0.4), 4)
+
+        cost_value = positive_metric(row, "avg_cost_usd")
+        latency_value = positive_metric(row, "avg_latency_ms")
+        cost_efficiency = 1.0 if min_cost is None or cost_value is None else round(min_cost / cost_value, 4)
+        latency_efficiency = (
+            1.0 if min_latency is None or latency_value is None else round(min_latency / latency_value, 4)
         )
 
+        cost_efficiency = round(min(max(cost_efficiency, 0.0), 1.0), 4)
+        latency_efficiency = round(min(max(latency_efficiency, 0.0), 1.0), 4)
+
+        return quality_score, cost_efficiency, latency_efficiency, weighting_enabled
+
     def score(row: dict) -> float:
-        conversion_rate, reuse_rate, _ = candidate_rates(row)
+        quality_score, cost_efficiency, latency_efficiency, _ = candidate_metrics(row)
         return round(
-            (conversion_rate * 0.6)
-            + (reuse_rate * 0.4),
+            (quality_score * 0.75)
+            + (cost_efficiency * 0.15)
+            + (latency_efficiency * 0.10),
             4,
         )
 
@@ -313,6 +353,7 @@ def get_best_model_hint(
         candidates,
         key=lambda row: (
             score(row),
+            candidate_metrics(row)[0],
             float(row.get("success_rate") or 0.0),
             int(row.get("total_runs") or 0),
         ),
@@ -321,7 +362,7 @@ def get_best_model_hint(
     best = ordered[0]
     total_runs = int(best.get("total_runs") or 0)
     confidence = confidence_label(total_runs)
-    conversion_rate, reuse_rate, weighting_enabled = candidate_rates(best)
+    quality_score, cost_efficiency, latency_efficiency, weighting_enabled = candidate_metrics(best)
     weighting_state = "enabled" if weighting_enabled else "fallback"
 
     return {
@@ -329,11 +370,15 @@ def get_best_model_hint(
         "model": best.get("model"),
         "task_type": best.get("task_type"),
         "score": score(best),
+        "quality_score": quality_score,
+        "cost_efficiency": cost_efficiency,
+        "latency_efficiency": latency_efficiency,
         "total_runs": total_runs,
         "confidence": confidence,
         "reason": (
-            f"conversion={conversion_rate:.4f}, "
-            f"reuse={reuse_rate:.4f}, "
+            f"quality={quality_score:.4f}, "
+            f"cost_efficiency={cost_efficiency:.4f}, "
+            f"latency_efficiency={latency_efficiency:.4f}, "
             f"runs={total_runs}, "
             f"confidence={confidence}, "
             f"recent_weighting={weighting_state}"
