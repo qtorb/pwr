@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from backend.main import app
 from db import get_conn
+from services.model_observatory import compute_reliability_score
 
 
 def ok(message: str) -> None:
@@ -37,6 +38,17 @@ def main() -> int:
     created_task_id: int | None = None
 
     try:
+        if (
+            abs(compute_reliability_score({"success_rate": 1.0, "preview_rate": 0.0, "failed_rate": 0.0}) - 1.0) <= 0.0001
+            and abs(compute_reliability_score({"success_rate": 0.0, "preview_rate": 1.0, "failed_rate": 0.0}) - 0.4) <= 0.0001
+            and abs(compute_reliability_score({"success_rate": 0.0, "preview_rate": 0.0, "failed_rate": 1.0}) - 0.0) <= 0.0001
+            and abs(compute_reliability_score({}) - 1.0) <= 0.0001
+        ):
+            ok("reliability score formula and fallback behave as expected")
+        else:
+            fail("reliability score formula or fallback does not match expectations")
+            failures += 1
+
         with TestClient(app) as client:
             projects_response = client.get("/api/projects")
             if projects_response.status_code != 200:
@@ -237,6 +249,82 @@ def main() -> int:
                     "reused_later": False,
                     "metadata_json": {"phase": "check", "case": "no-metrics"},
                 },
+                {
+                    "source_app": "pwr-check",
+                    "project_id": project_id,
+                    "task_id": created_task_id,
+                    "workflow": "retake",
+                    "task_type": "reliability-compare",
+                    "agent_role": "router",
+                    "provider": "gemini",
+                    "model": "gemini-2.5-pro",
+                    "status": "preview",
+                    "latency_ms": 1000,
+                    "input_tokens": 700,
+                    "output_tokens": 160,
+                    "cost_usd": 0.02,
+                    "quality_rating": 4.0,
+                    "converted_to_asset": True,
+                    "reused_later": True,
+                    "metadata_json": {"phase": "check", "case": "reliability-pro-preview"},
+                },
+                {
+                    "source_app": "pwr-check",
+                    "project_id": project_id,
+                    "task_id": created_task_id,
+                    "workflow": "retake",
+                    "task_type": "reliability-compare",
+                    "agent_role": "router",
+                    "provider": "gemini",
+                    "model": "gemini-2.5-pro",
+                    "status": "failed",
+                    "latency_ms": 1000,
+                    "input_tokens": 700,
+                    "output_tokens": 0,
+                    "cost_usd": 0.02,
+                    "quality_rating": None,
+                    "converted_to_asset": False,
+                    "reused_later": False,
+                    "metadata_json": {"phase": "check", "case": "reliability-pro-failed"},
+                },
+                {
+                    "source_app": "pwr-check",
+                    "project_id": project_id,
+                    "task_id": created_task_id,
+                    "workflow": "retake",
+                    "task_type": "reliability-compare",
+                    "agent_role": "router",
+                    "provider": "gemini",
+                    "model": "gemini-2.5-flash-lite",
+                    "status": "preview",
+                    "latency_ms": 1000,
+                    "input_tokens": 700,
+                    "output_tokens": 160,
+                    "cost_usd": 0.02,
+                    "quality_rating": 4.0,
+                    "converted_to_asset": True,
+                    "reused_later": True,
+                    "metadata_json": {"phase": "check", "case": "reliability-flash-preview-1"},
+                },
+                {
+                    "source_app": "pwr-check",
+                    "project_id": project_id,
+                    "task_id": created_task_id,
+                    "workflow": "retake",
+                    "task_type": "reliability-compare",
+                    "agent_role": "router",
+                    "provider": "gemini",
+                    "model": "gemini-2.5-flash-lite",
+                    "status": "preview",
+                    "latency_ms": 1000,
+                    "input_tokens": 700,
+                    "output_tokens": 0,
+                    "cost_usd": 0.02,
+                    "quality_rating": 3.8,
+                    "converted_to_asset": False,
+                    "reused_later": False,
+                    "metadata_json": {"phase": "check", "case": "reliability-flash-preview-2"},
+                },
             ]
 
             for payload in payloads:
@@ -336,15 +424,17 @@ def main() -> int:
                 and recommended.get("provider") == "gemini"
                 and recommended.get("model") == "gemini-2.5-pro"
                 and recommended.get("task_type") == "briefing"
-                and abs(float(recommended.get("score") or 0.0) - 0.7572) <= 0.0002
+                and abs(float(recommended.get("score") or 0.0) - 0.7095) <= 0.0002
                 and abs(float(recommended.get("quality_score") or 0.0) - 0.6762) <= 0.0002
                 and abs(float(recommended.get("cost_efficiency") or 0.0) - 1.0) <= 0.0002
                 and abs(float(recommended.get("latency_efficiency") or 0.0) - 1.0) <= 0.0002
+                and abs(float(recommended.get("reliability_score") or 0.0) - 0.2) <= 0.0002
                 and int(recommended.get("total_runs") or 0) == 3
                 and recommended.get("confidence") == "low"
                 and "quality=" in str(recommended.get("reason") or "")
                 and "cost_efficiency=1.0000" in str(recommended.get("reason") or "")
                 and "latency_efficiency=1.0000" in str(recommended.get("reason") or "")
+                and "reliability=0.2000" in str(recommended.get("reason") or "")
                 and "runs=3" in str(recommended.get("reason") or "")
                 and "confidence=low" in str(recommended.get("reason") or "")
                 and "recent_weighting=enabled" in str(recommended.get("reason") or "")
@@ -364,7 +454,8 @@ def main() -> int:
                 fallback_recommended
                 and fallback_recommended.get("provider") == "openai"
                 and fallback_recommended.get("model") == "gpt-5.4-mini"
-                and abs(float(fallback_recommended.get("score") or 0.0) - 0.55) <= 0.0002
+                and abs(float(fallback_recommended.get("score") or 0.0) - 0.61) <= 0.0002
+                and abs(float(fallback_recommended.get("reliability_score") or 0.0) - 1.0) <= 0.0002
                 and "recent_weighting=fallback" in str(fallback_recommended.get("reason") or "")
             ):
                 ok("best model hint falls back cleanly when timestamps are invalid")
@@ -385,7 +476,8 @@ def main() -> int:
                 and abs(float(efficient_recommended.get("quality_score") or 0.0) - 0.5) <= 0.0002
                 and abs(float(efficient_recommended.get("cost_efficiency") or 0.0) - 1.0) <= 0.0002
                 and abs(float(efficient_recommended.get("latency_efficiency") or 0.0) - 1.0) <= 0.0002
-                and abs(float(efficient_recommended.get("score") or 0.0) - 0.625) <= 0.0002
+                and abs(float(efficient_recommended.get("reliability_score") or 0.0) - 0.0) <= 0.0002
+                and abs(float(efficient_recommended.get("score") or 0.0) - 0.575) <= 0.0002
             ):
                 ok("best model hint prefers the cheaper and faster model when quality is similar")
             else:
@@ -404,12 +496,34 @@ def main() -> int:
                 and no_metrics_recommended.get("model") == "gpt-5.4-mini"
                 and abs(float(no_metrics_recommended.get("cost_efficiency") or 0.0) - 1.0) <= 0.0002
                 and abs(float(no_metrics_recommended.get("latency_efficiency") or 0.0) - 1.0) <= 0.0002
+                and abs(float(no_metrics_recommended.get("reliability_score") or 0.0) - 0.4) <= 0.0002
                 and "cost_efficiency=1.0000" in str(no_metrics_recommended.get("reason") or "")
                 and "latency_efficiency=1.0000" in str(no_metrics_recommended.get("reason") or "")
             ):
                 ok("best model hint uses neutral efficiency when cost or latency is missing")
             else:
                 fail("best model hint did not apply neutral efficiency fallback for missing metrics")
+                failures += 1
+
+            reliability_compare_response = client.get("/api/model-runs/best", params={"task_type": "reliability-compare"})
+            if reliability_compare_response.status_code != 200:
+                fail("best model hint reliability endpoint failed")
+                return 1
+
+            reliability_recommended = reliability_compare_response.json().get("recommended")
+            if (
+                reliability_recommended
+                and reliability_recommended.get("provider") == "gemini"
+                and reliability_recommended.get("model") == "gemini-2.5-flash-lite"
+                and abs(float(reliability_recommended.get("quality_score") or 0.0) - 0.5) <= 0.0002
+                and abs(float(reliability_recommended.get("cost_efficiency") or 0.0) - 1.0) <= 0.0002
+                and abs(float(reliability_recommended.get("latency_efficiency") or 0.0) - 1.0) <= 0.0002
+                and abs(float(reliability_recommended.get("reliability_score") or 0.0) - 0.4) <= 0.0002
+                and abs(float(reliability_recommended.get("score") or 0.0) - 0.615) <= 0.0002
+            ):
+                ok("best model hint uses reliability to break ties when quality and efficiency are equal")
+            else:
+                fail("best model hint did not use reliability as expected")
                 failures += 1
 
             empty_best_response = client.get("/api/model-runs/best", params={"task_type": "nonexistent"})
