@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { getTaskDetailData } from "../../../lib/pwr-api";
+import TaskAssetPanel from "./task-asset-panel";
 import TaskExecutionPanel from "./task-execution-panel";
 
 export const dynamic = "force-dynamic";
@@ -160,6 +161,10 @@ export default async function TaskDetailPage({ params, searchParams }) {
 
   const taskState = latestExecution?.execution_status || task.execution_status || task.status || "pending";
   const updatedState = resolvedSearchParams.updated === "1" ? resolvedSearchParams.status || "" : "";
+  const resultContent = String(latestExecution?.output_text || task.llm_output || "").trim();
+  const briefingContent = String(task.context || task.description || task.router_summary || "").trim();
+  const canSaveAsset = ["preview", "executed"].includes(String(taskState).toLowerCase()) && Boolean(resultContent || briefingContent);
+  const defaultAssetType = String(taskState).toLowerCase() === "preview" ? "preview" : "output";
 
   return (
     <main className="shell">
@@ -286,6 +291,20 @@ export default async function TaskDetailPage({ params, searchParams }) {
 
           <aside className="workspace-side">
             <TaskExecutionPanel taskId={task.id} currentState={taskState} />
+            {canSaveAsset ? (
+              <TaskAssetPanel
+                taskId={task.id}
+                projectId={task.project_id}
+                projectHref={`/projects/${task.project_id}`}
+                defaultAssetType={defaultAssetType}
+                defaultTitle={task.title || `Tarea ${task.id}`}
+                defaultSummary=""
+                resultContent={resultContent}
+                briefingContent={briefingContent}
+                sourceExecutionId={latestExecution?.id || null}
+                sourceExecutionStatus={taskState}
+              />
+            ) : null}
 
             <div className="panel">
               <div className="panel-body stack">

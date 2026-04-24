@@ -387,6 +387,66 @@ a {
   border-color: #efb2b2;
 }
 
+.secondary-button {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondary-button:hover {
+  background: #fafcff;
+}
+
+.secondary-button:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.asset-form {
+  display: grid;
+  gap: 12px;
+}
+
+.form-field {
+  display: grid;
+  gap: 6px;
+}
+
+.form-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.form-field input,
+.form-field select,
+.form-field textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  padding: 10px 12px;
+}
+
+.form-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.stack.compact {
+  gap: 6px;
+  margin-top: 8px;
+}
+
 @media (max-width: 980px) {
   .grid.home {
     grid-template-columns: 1fr;

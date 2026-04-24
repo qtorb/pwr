@@ -89,11 +89,16 @@ def cleanup_controlled_task(task_id: int | None) -> None:
             "SELECT artifact_md_path, artifact_json_path FROM executions_history WHERE task_id = ?",
             (task_id,),
         ).fetchall()
+        asset_rows = conn.execute(
+            "SELECT artifact_md_path, artifact_json_path FROM assets WHERE task_id = ?",
+            (task_id,),
+        ).fetchall()
+        conn.execute("DELETE FROM assets WHERE task_id = ?", (task_id,))
         conn.execute("DELETE FROM executions_history WHERE task_id = ?", (task_id,))
         conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         conn.commit()
 
-    for row in rows:
+    for row in [*rows, *asset_rows]:
         for rel_path in row:
             if not rel_path:
                 continue
@@ -313,10 +318,46 @@ def main() -> int:
             "Actualizado" in updated_task_html
             and expected_button in updated_task_html
             and "Sin ejecuciones todavia" not in updated_task_html
+            and "Guardar como activo" in updated_task_html
         ):
             ok(f"task route refreshes after execution with CTA={expected_button}")
         else:
             fail("task route did not refresh with updated execution state")
+            failures += 1
+
+        asset_title = "Next.js route smoke asset"
+        created_asset = request_json(
+            f"{backend_base}/api/projects/{project_id}/assets",
+            method="POST",
+            payload={
+                "task_id": controlled_task_id,
+                "source_execution_id": latest_run.get("id"),
+                "source_execution_status": next_state,
+                "asset_type": "preview" if next_state == "preview" else "output",
+                "title": asset_title,
+                "summary": "Activo controlado para validar persistencia en proyecto.",
+                "content": (
+                    latest_run.get("output_text")
+                    or latest_task.get("llm_output")
+                    or latest_task.get("router_summary")
+                    or controlled_task.get("context")
+                ),
+            },
+        )
+        if (
+            int(created_asset.get("task_id") or 0) == controlled_task_id
+            and int(created_asset.get("source_execution_id") or 0) == int(latest_run.get("id") or 0)
+        ):
+            ok(f"asset creation endpoint persisted asset id={created_asset['id']} linked to task_id={controlled_task_id}")
+        else:
+            fail("asset creation did not persist the expected task linkage")
+            failures += 1
+
+        project_html_after_asset = wait_for_http(f"{frontend_base}/projects/{project_id}", timeout=60.0)
+        if asset_title in project_html_after_asset and "Activos relacionados" in project_html_after_asset:
+            ok(f"project route shows the saved asset for project_id={project_id}")
+        else:
+            fail("project route did not show the saved asset")
             failures += 1
 
     except Exception as exc:

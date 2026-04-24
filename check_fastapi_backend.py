@@ -150,16 +150,25 @@ def main() -> int:
                 fail("task execution did not persist the expected state")
                 failures += 1
 
+            latest_execution_item = latest_after_execute.json().get("item") or {}
+            task_after_execute_payload = task_after_execute.json()
+
             create_asset_response = client.post(
                 f"/api/projects/{project_id}/assets",
                 json={
                     "task_id": created_task_id,
-                    "asset_type": "briefing",
+                    "asset_type": "preview" if task_after_execute_payload["execution_status"] == "preview" else "output",
                     "title": "FastAPI controlled asset",
                     "summary": "Representative asset created by HTTP backend check.",
-                    "content": created_task["router_summary"] or created_task["context"] or "Reusable content",
-                    "source_execution_status": created_task["execution_status"],
-                    "source_execution_id": None,
+                    "content": (
+                        latest_execution_item.get("output_text")
+                        or task_after_execute_payload.get("llm_output")
+                        or task_after_execute_payload.get("router_summary")
+                        or created_task["context"]
+                        or "Reusable content"
+                    ),
+                    "source_execution_status": task_after_execute_payload["execution_status"],
+                    "source_execution_id": latest_execution_item.get("id"),
                 },
             )
             if create_asset_response.status_code != 200:
@@ -167,7 +176,14 @@ def main() -> int:
                 return 1
             created_asset = create_asset_response.json()
             created_asset_id = int(created_asset["id"])
-            ok(f"created representative asset through HTTP id={created_asset_id}")
+            if (
+                created_asset.get("task_id") == created_task_id
+                and created_asset.get("source_execution_id") == latest_execution_item.get("id")
+            ):
+                ok(f"created representative asset through HTTP id={created_asset_id}")
+            else:
+                fail("created asset is not linked to the expected task/execution")
+                failures += 1
 
             asset_detail_response = client.get(f"/api/assets/{created_asset_id}")
             project_assets_response = client.get(f"/api/projects/{project_id}/assets")
