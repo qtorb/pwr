@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import json
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parent
 FRONTEND_DIR = ROOT / "frontend-nextjs"
 PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
 BACKEND_HOST = "127.0.0.1"
+DB_PATH = ROOT / "pwr_data" / "pwr.db"
 
 
 def safe_text(message: str) -> str:
@@ -65,6 +67,26 @@ def wait_for_http(url: str, expected_status: int = 200, timeout: float = 25.0) -
     raise RuntimeError(f"{url} did not become ready: {last_error}")
 
 
+def request_json(url: str, method: str = "GET", payload: dict | None = None) -> dict:
+    data = None
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        data = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(request, timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def cleanup_controlled_task(task_id: int | None) -> None:
+    if not task_id:
+        return
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        conn.commit()
+
+
 def terminate_process_tree(proc: subprocess.Popen | None) -> None:
     if not proc:
         return
@@ -98,6 +120,7 @@ def main() -> int:
     failures = 0
     backend_proc: subprocess.Popen | None = None
     frontend_proc: subprocess.Popen | None = None
+    controlled_task_id: int | None = None
     temp_log_file = tempfile.NamedTemporaryFile(
         prefix="pwr-nextjs-route-smoke-",
         suffix=".log",
@@ -184,29 +207,57 @@ def main() -> int:
             fail("home route is missing expected content")
             failures += 1
 
-        with urllib.request.urlopen(f"{backend_base}/api/projects", timeout=5) as response:
-            project_items = json.loads(response.read().decode("utf-8")).get("items", [])
+        project_items = request_json(f"{backend_base}/api/projects").get("items", [])
         if not project_items:
             fail("backend returned no projects for readonly workspace smoke")
             return 1
 
         project_id = int(project_items[0]["id"])
+        controlled_task = request_json(
+            f"{backend_base}/api/projects/{project_id}/tasks",
+            method="POST",
+            payload={
+                "title": "Next.js route smoke task",
+                "description": "Tarea controlada para validar detalle readonly en Next.js.",
+                "task_type": "Pensar",
+                "context": "Contexto controlado para el smoke de /tasks/{id}.",
+            },
+        )
+        controlled_task_id = int(controlled_task["id"])
+        ok(f"created controlled task id={controlled_task_id} for route smoke")
+
         project_html = wait_for_http(f"{frontend_base}/projects/{project_id}", timeout=40.0)
         if (
             "Contexto del proyecto" in project_html
             and "Tareas" in project_html
             and "Activos relacionados" in project_html
             and "Solo lectura" in project_html
+            and f"/tasks/{controlled_task_id}" in project_html
         ):
             ok(f"project readonly route renders expected content for project_id={project_id}")
         else:
             fail("project readonly route is missing expected content")
             failures += 1
 
+        task_html = wait_for_http(f"{frontend_base}/tasks/{controlled_task_id}", timeout=40.0)
+        if (
+            controlled_task["title"] in task_html
+            and "Contexto" in task_html
+            and "Ejecucion" in task_html
+            and "Output" in task_html
+            and "Historial" in task_html
+            and f"/projects/{project_id}" in task_html
+        ):
+            ok(f"task readonly route renders expected content for task_id={controlled_task_id}")
+        else:
+            fail("task readonly route is missing expected content")
+            failures += 1
+
     except Exception as exc:
         fail(f"unexpected error: {type(exc).__name__}: {exc}")
         failures += 1
     finally:
+        cleanup_controlled_task(controlled_task_id)
         terminate_process_tree(frontend_proc)
         terminate_process_tree(backend_proc)
         if frontend_log_handle:

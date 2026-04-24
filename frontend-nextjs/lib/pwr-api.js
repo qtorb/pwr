@@ -52,3 +52,25 @@ export async function getProjectWorkspaceData(projectId) {
       .map((result) => result.reason?.message || "Unknown API error"),
   };
 }
+
+export async function getTaskDetailData(taskId) {
+  const [task, latestExecution, executions] = await Promise.allSettled([
+    fetchJson(`/api/tasks/${taskId}`),
+    fetchJson(`/api/tasks/${taskId}/executions/latest`),
+    fetchJson(`/api/tasks/${taskId}/executions`),
+  ]);
+
+  const taskError = task.status === "rejected" ? task.reason?.message || "Unknown API error" : "";
+
+  return {
+    apiBaseUrl: DEFAULT_API_BASE_URL,
+    task: task.status === "fulfilled" ? task.value : null,
+    latestExecution:
+      latestExecution.status === "fulfilled" ? latestExecution.value.item || null : null,
+    executions: executions.status === "fulfilled" ? executions.value.items : [],
+    missing: taskError.includes(": 404"),
+    errors: [task, latestExecution, executions]
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason?.message || "Unknown API error"),
+  };
+}

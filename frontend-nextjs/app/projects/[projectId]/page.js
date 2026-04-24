@@ -38,7 +38,7 @@ function TaskList({ items }) {
   return (
     <div className="list">
       {items.map((task) => (
-        <div className="row" key={task.id}>
+        <Link className="row row-link" key={task.id} href={`/tasks/${task.id}`}>
           <div className="row-top">
             <div className="row-title">{task.title || "Tarea sin titulo"}</div>
             <StateBadge state={task.execution_status} />
@@ -51,7 +51,7 @@ function TaskList({ items }) {
           <div className="subtle">
             {task.router_summary || task.description || task.context || "Sin resumen visible para esta tarea."}
           </div>
-        </div>
+        </Link>
       ))}
     </div>
   );
