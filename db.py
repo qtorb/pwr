@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sqlite3
 from datetime import datetime
@@ -12,7 +13,17 @@ from state_contract import normalize_execution_state
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "pwr_data"
+PWR_DATA_DIR_ENV = "PWR_DATA_DIR"
+
+
+def resolve_data_dir() -> Path:
+    configured = str(os.getenv(PWR_DATA_DIR_ENV, "") or "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return BASE_DIR / "pwr_data"
+
+
+DATA_DIR = resolve_data_dir()
 UPLOADS_DIR = DATA_DIR / "uploads"
 PORTABLE_RUNS_DIR = DATA_DIR / "portable_runs"
 REUSABLE_ASSETS_DIR = DATA_DIR / "reusable_assets"
@@ -20,10 +31,10 @@ DB_PATH = DATA_DIR / "pwr.db"
 
 
 def ensure_dirs() -> None:
-    DATA_DIR.mkdir(exist_ok=True)
-    UPLOADS_DIR.mkdir(exist_ok=True)
-    PORTABLE_RUNS_DIR.mkdir(exist_ok=True)
-    REUSABLE_ASSETS_DIR.mkdir(exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    PORTABLE_RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    REUSABLE_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_conn() -> sqlite3.Connection:
