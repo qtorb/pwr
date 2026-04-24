@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { getShellHomeData } from "../lib/pwr-api";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +62,7 @@ function ProjectList({ items }) {
   return (
     <div className="list">
       {items.map((project) => (
-        <div className="row project-row" key={project.id}>
+        <Link className="row project-row row-link" key={project.id} href={`/projects/${project.id}`}>
           <div className="row-top">
             <div className="row-title">{project.name}</div>
             {project.is_favorite ? <span className="badge executed">Favorito</span> : null}
@@ -71,7 +73,7 @@ function ProjectList({ items }) {
             <span>{project.asset_count || 0} activos</span>
             <span>{formatDate(project.updated_at || project.created_at)}</span>
           </div>
-        </div>
+        </Link>
       ))}
     </div>
   );
