@@ -104,6 +104,11 @@ export default async function HomePage() {
             Home consume FastAPI directamente y mantiene a Streamlit como runtime principal durante la transicion.
           </p>
           <div className="subtle">API base actual: {apiBaseUrl}</div>
+          <div>
+            <Link href="/observatory" className="inline-link">
+              Observatorio
+            </Link>
+          </div>
           {errors.length ? (
             <div className="muted-box">
               Se detectaron respuestas incompletas desde la API:

@@ -87,6 +87,24 @@ export async function getTaskDetailData(taskId) {
   };
 }
 
+export async function getModelObservatorySummaryData() {
+  const summary = await fetchJson("/api/model-runs/summary?limit=50");
+  const rows = Array.isArray(summary.summary) ? summary.summary : [];
+  const ordered = [...rows].sort((a, b) => {
+    const byConversion = Number(b.conversion_rate || 0) - Number(a.conversion_rate || 0);
+    if (byConversion !== 0) return byConversion;
+    const byReuse = Number(b.reuse_rate || 0) - Number(a.reuse_rate || 0);
+    if (byReuse !== 0) return byReuse;
+    return Number(b.total_runs || 0) - Number(a.total_runs || 0);
+  });
+
+  return {
+    apiBaseUrl: DEFAULT_API_BASE_URL,
+    summary: ordered,
+    totalRuns: Number(summary.total_runs || 0),
+  };
+}
+
 export async function reuseAssetToTask(projectId, assetId) {
   const reusePayload = await postJson(`/api/assets/${assetId}/reuse`, {});
   const createdTask = await postJson(`/api/projects/${projectId}/tasks`, {

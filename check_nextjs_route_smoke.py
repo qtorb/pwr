@@ -255,6 +255,18 @@ def main() -> int:
             fail("home route is missing expected content")
             failures += 1
 
+        observatory_html = wait_for_http(f"{frontend_base}/observatory", timeout=60.0)
+        if (
+            "Model Observatory" in observatory_html
+            and "provider" in observatory_html
+            and "conversion_rate" in observatory_html
+            and "reuse_rate" in observatory_html
+        ):
+            ok("observatory route renders the expected summary table")
+        else:
+            fail("observatory route is missing expected content")
+            failures += 1
+
         project_items = request_json(f"{backend_base}/api/projects").get("items", [])
         if not project_items:
             fail("backend returned no projects for readonly workspace smoke")
