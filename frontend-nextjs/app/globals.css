@@ -446,6 +446,39 @@ a {
   font-size: 13px;
 }
 
+.hint-feedback-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feedback-chip {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.feedback-chip:hover {
+  background: var(--surface-alt);
+}
+
+.feedback-chip:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.feedback-chip.active {
+  border-color: #b7e7c1;
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
 .inline-link {
   color: var(--accent);
   font-weight: 600;

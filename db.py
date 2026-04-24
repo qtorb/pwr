@@ -545,6 +545,31 @@ def init_db() -> None:
         ensure_column(conn, "model_runs", "metadata_json", "TEXT DEFAULT '{}'")
         ensure_column(conn, "model_runs", "created_at", "TEXT DEFAULT ''")
 
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS model_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL,
+                task_type TEXT DEFAULT '',
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                score REAL DEFAULT 0,
+                confidence TEXT DEFAULT '',
+                feedback TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(task_id) REFERENCES tasks(id)
+            )
+            """
+        )
+        ensure_column(conn, "model_feedback", "task_id", "INTEGER")
+        ensure_column(conn, "model_feedback", "task_type", "TEXT DEFAULT ''")
+        ensure_column(conn, "model_feedback", "provider", "TEXT DEFAULT ''")
+        ensure_column(conn, "model_feedback", "model", "TEXT DEFAULT ''")
+        ensure_column(conn, "model_feedback", "score", "REAL DEFAULT 0")
+        ensure_column(conn, "model_feedback", "confidence", "TEXT DEFAULT ''")
+        ensure_column(conn, "model_feedback", "feedback", "TEXT DEFAULT ''")
+        ensure_column(conn, "model_feedback", "created_at", "TEXT DEFAULT ''")
+
         count = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
         if count == 0:
             created = now_iso()

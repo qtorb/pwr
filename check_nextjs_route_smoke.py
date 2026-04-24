@@ -17,7 +17,7 @@ import urllib.request
 from contextlib import suppress
 from pathlib import Path
 
-from services.model_observatory import find_task_execution_model_runs
+from services.model_observatory import find_task_execution_model_runs, list_model_feedback
 
 
 ROOT = Path(__file__).resolve().parent
@@ -105,6 +105,7 @@ def cleanup_controlled_task(task_id: int | None) -> None:
             "SELECT artifact_md_path, artifact_json_path FROM assets WHERE task_id = ?",
             (task_id,),
         ).fetchall()
+        conn.execute("DELETE FROM model_feedback WHERE task_id = ?", (task_id,))
         conn.execute("DELETE FROM assets WHERE task_id = ?", (task_id,))
         conn.execute("DELETE FROM executions_history WHERE task_id = ?", (task_id,))
         conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
@@ -326,6 +327,9 @@ def main() -> int:
             and "Ejecutar ahora" in task_html
             and "Confianza" in task_html
             and "ejecuciones observadas" in task_html
+            and "👍 util" in task_html
+            and "👎 no util" in task_html
+            and "↔ use otro modelo" in task_html
         ):
             ok(f"task readonly route renders expected content for task_id={controlled_task_id}")
         else:
@@ -384,6 +388,26 @@ def main() -> int:
             ok(f"task route refreshes after execution with CTA={expected_button}")
         else:
             fail("task route did not refresh with updated execution state")
+            failures += 1
+
+        feedback_payload = request_json(
+            f"{backend_base}/api/model-feedback",
+            method="POST",
+            payload={
+                "task_id": controlled_task_id,
+                "task_type": latest_task.get("task_type") or "generic",
+                "provider": latest_run.get("provider") or "gemini",
+                "model": latest_run.get("model") or "gemini-2.5-flash-lite",
+                "score": 0.75,
+                "confidence": "medium",
+                "feedback": "useful",
+            },
+        )
+        feedback_rows = list_model_feedback(task_id=controlled_task_id, limit=10)
+        if feedback_payload.get("feedback") == "useful" and feedback_rows and feedback_rows[0]["feedback"] == "useful":
+            ok("model feedback endpoint persists hint feedback for the task")
+        else:
+            fail("model feedback did not persist as expected")
             failures += 1
 
         asset_title = "Next.js route smoke asset"
