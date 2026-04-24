@@ -93,8 +93,8 @@ export async function getTaskDetailData(taskId) {
 }
 
 export async function getModelObservatorySummaryData() {
-  const summary = await fetchJson("/api/model-runs/summary?limit=50");
-  const rows = Array.isArray(summary.summary) ? summary.summary : [];
+  const summaryResponse = await fetchJson("/api/model-runs/summary?limit=50");
+  const rows = Array.isArray(summaryResponse.summary) ? summaryResponse.summary : [];
   const ordered = [...rows].sort((a, b) => {
     const byConversion = Number(b.conversion_rate || 0) - Number(a.conversion_rate || 0);
     if (byConversion !== 0) return byConversion;
@@ -102,11 +102,27 @@ export async function getModelObservatorySummaryData() {
     if (byReuse !== 0) return byReuse;
     return Number(b.total_runs || 0) - Number(a.total_runs || 0);
   });
+  const taskTypes = [...new Set(ordered.map((row) => row.task_type).filter(Boolean))];
+  const hintResults = await Promise.allSettled(
+    taskTypes.map(async (taskType) => {
+      const response = await fetchJson(`/api/model-runs/best?task_type=${encodeURIComponent(taskType)}`);
+      return response.recommended || null;
+    }),
+  );
+  const bestHints = hintResults
+    .filter((result) => result.status === "fulfilled" && result.value)
+    .map((result) => result.value)
+    .sort((a, b) => {
+      const byScore = Number(b.score || 0) - Number(a.score || 0);
+      if (byScore !== 0) return byScore;
+      return String(a.task_type || "").localeCompare(String(b.task_type || ""));
+    });
 
   return {
     apiBaseUrl: DEFAULT_API_BASE_URL,
     summary: ordered,
-    totalRuns: Number(summary.total_runs || 0),
+    bestHints,
+    totalRuns: Number(summaryResponse.total_runs || 0),
   };
 }
 

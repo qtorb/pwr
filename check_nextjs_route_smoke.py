@@ -259,8 +259,16 @@ def main() -> int:
         if (
             "Model Observatory" in observatory_html
             and "provider" in observatory_html
+            and "success_rate" in observatory_html
+            and "preview_rate" in observatory_html
+            and "failed_rate" in observatory_html
+            and "avg_latency_ms" in observatory_html
+            and "avg_cost_usd" in observatory_html
             and "conversion_rate" in observatory_html
             and "reuse_rate" in observatory_html
+            and "Best hints" in observatory_html
+            and "quality" in observatory_html
+            and "confidence" in observatory_html
         ):
             ok("observatory route renders the expected summary table")
         else:
