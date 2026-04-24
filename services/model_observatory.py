@@ -226,6 +226,13 @@ def get_best_model_hint(
             4,
         )
 
+    def confidence_label(total_runs: int) -> str:
+        if total_runs < 5:
+            return "low"
+        if total_runs < 20:
+            return "medium"
+        return "high"
+
     ordered = sorted(
         candidates,
         key=lambda row: (
@@ -236,13 +243,24 @@ def get_best_model_hint(
         reverse=True,
     )
     best = ordered[0]
+    total_runs = int(best.get("total_runs") or 0)
+    confidence = confidence_label(total_runs)
+    conversion_rate = float(best.get("conversion_rate") or 0.0)
+    reuse_rate = float(best.get("reuse_rate") or 0.0)
 
     return {
         "provider": best.get("provider"),
         "model": best.get("model"),
         "task_type": best.get("task_type"),
         "score": score(best),
-        "reason": "high conversion and reuse rates",
+        "total_runs": total_runs,
+        "confidence": confidence,
+        "reason": (
+            f"conversion={conversion_rate:.4f}, "
+            f"reuse={reuse_rate:.4f}, "
+            f"runs={total_runs}, "
+            f"confidence={confidence}"
+        ),
     }
 
 

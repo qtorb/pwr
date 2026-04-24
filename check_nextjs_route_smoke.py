@@ -308,7 +308,9 @@ def main() -> int:
             and "Historial" in task_html
             and f"/projects/{project_id}" in task_html
             and "Ejecutar ahora" in task_html
-            and "Modelo recomendado:" in task_html
+            and "Hint experimental:" in task_html
+            and "confianza " in task_html
+            and "basado en" in task_html
         ):
             ok(f"task readonly route renders expected content for task_id={controlled_task_id}")
         else:

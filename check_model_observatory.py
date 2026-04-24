@@ -222,10 +222,27 @@ def main() -> int:
                 and recommended.get("model") == "gemini-2.5-pro"
                 and recommended.get("task_type") == "briefing"
                 and abs(float(recommended.get("score") or 0.0) - 0.5333) <= 0.0002
+                and int(recommended.get("total_runs") or 0) == 3
+                and recommended.get("confidence") == "low"
+                and "conversion=" in str(recommended.get("reason") or "")
+                and "reuse=" in str(recommended.get("reason") or "")
+                and "runs=3" in str(recommended.get("reason") or "")
+                and "confidence=low" in str(recommended.get("reason") or "")
             ):
                 ok("best model hint returns the expected recommendation")
             else:
                 fail("best model hint did not return the expected recommendation")
+                failures += 1
+
+            empty_best_response = client.get("/api/model-runs/best", params={"task_type": "nonexistent"})
+            if empty_best_response.status_code != 200:
+                fail("best model hint null-case endpoint failed")
+                return 1
+
+            if empty_best_response.json().get("recommended") is None:
+                ok("best model hint returns null when no data exists for the task_type")
+            else:
+                fail("best model hint should return null when there is no data for the task_type")
                 failures += 1
 
     except Exception as exc:

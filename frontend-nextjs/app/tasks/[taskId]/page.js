@@ -42,6 +42,14 @@ function stateCopy(state) {
   }[normalized] || normalized;
 }
 
+function confidenceCopy(value) {
+  return {
+    low: "baja",
+    medium: "media",
+    high: "alta",
+  }[String(value || "").toLowerCase()] || "desconocida";
+}
+
 function ExecutionHistory({ items }) {
   if (!items.length) {
     return <div className="muted-box">Sin ejecuciones todavia.</div>;
@@ -198,7 +206,8 @@ export default async function TaskDetailPage({ params, searchParams }) {
 
         {recommendation ? (
           <section className="feedback-banner">
-            Modelo recomendado: {recommendation.model}
+            Hint experimental: {recommendation.model} · confianza {confidenceCopy(recommendation.confidence)} ·
+            {" "}basado en {recommendation.total_runs || 0} ejecuciones
           </section>
         ) : null}
 

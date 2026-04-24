@@ -242,7 +242,14 @@ def main() -> int:
                 failures += 1
 
             best_payload = client.get("/api/model-runs/best", params={"task_type": "Pensar"}).json()
-            if best_payload.get("recommended") and best_payload["recommended"].get("model"):
+            recommended = best_payload.get("recommended")
+            if (
+                recommended
+                and recommended.get("model")
+                and isinstance(recommended.get("total_runs"), int)
+                and recommended.get("confidence") in {"low", "medium", "high"}
+                and "conversion=" in str(recommended.get("reason") or "")
+            ):
                 ok("best model hint endpoint returns a recommendation")
             else:
                 fail("best model hint endpoint did not return a recommendation")
