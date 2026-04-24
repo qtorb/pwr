@@ -65,7 +65,7 @@ function AssetList({ items }) {
   return (
     <div className="list">
       {items.map((asset) => (
-        <div className="row" key={asset.id}>
+        <Link className="row row-link" key={asset.id} href={`/assets/${asset.id}`}>
           <div className="row-top">
             <div className="row-title">{asset.title || "Activo sin titulo"}</div>
             <span className="badge executed">{asset.asset_type || "asset"}</span>
@@ -76,7 +76,7 @@ function AssetList({ items }) {
             <span>{formatDate(asset.updated_at || asset.created_at)}</span>
           </div>
           <div className="subtle">{asset.summary || "Sin resumen visible para este activo."}</div>
-        </div>
+        </Link>
       ))}
     </div>
   );
@@ -111,8 +111,8 @@ export default async function ProjectWorkspacePage({ params }) {
           </div>
           <h1>{project.name}</h1>
           <p>
-            Primera vista de proyecto en modo solo lectura. Streamlit sigue vivo; esta shell solo demuestra
-            que proyecto, tareas y activos ya pueden consumirse desde FastAPI.
+            Primera vista de proyecto en modo solo lectura. Streamlit sigue vivo; esta shell solo
+            demuestra que proyecto, tareas y activos ya pueden consumirse desde FastAPI.
           </p>
           <div className="subtle">API base actual: {apiBaseUrl}</div>
         </section>
@@ -140,8 +140,8 @@ export default async function ProjectWorkspacePage({ params }) {
                 </div>
                 <div className="stack">
                   <div className="info-block">
-                    <div className="label">Descripción</div>
-                    <div>{project.description || "Sin descripción definida."}</div>
+                    <div className="label">Descripcion</div>
+                    <div>{project.description || "Sin descripcion definida."}</div>
                   </div>
                   <div className="info-block">
                     <div className="label">Objetivo</div>

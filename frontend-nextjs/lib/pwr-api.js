@@ -52,3 +52,23 @@ export async function getProjectWorkspaceData(projectId) {
       .map((result) => result.reason?.message || "Unknown API error"),
   };
 }
+
+export async function getAssetDetailData(assetId) {
+  try {
+    const asset = await fetchJson(`/api/assets/${assetId}`);
+    return {
+      apiBaseUrl: DEFAULT_API_BASE_URL,
+      asset,
+      errors: [],
+      missing: false,
+    };
+  } catch (error) {
+    const message = error?.message || "Unknown API error";
+    return {
+      apiBaseUrl: DEFAULT_API_BASE_URL,
+      asset: null,
+      errors: [message],
+      missing: message.includes(": 404"),
+    };
+  }
+}
