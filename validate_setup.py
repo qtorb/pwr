@@ -21,7 +21,9 @@ REQUIRED_FILES = [
     "services/tasks.py",
     "services/executions.py",
     "services/assets.py",
+    "services/model_observatory.py",
     "check_fastapi_backend.py",
+    "check_model_observatory.py",
     "router/domain.py",
     "router/providers.py",
     "router/execution_service.py",
@@ -35,6 +37,7 @@ SERVICE_FILES = [
     ROOT / "services" / "tasks.py",
     ROOT / "services" / "executions.py",
     ROOT / "services" / "assets.py",
+    ROOT / "services" / "model_observatory.py",
 ]
 
 
@@ -116,6 +119,8 @@ def main() -> int:
         "services/tasks.py",
         "services/executions.py",
         "services/assets.py",
+        "services/model_observatory.py",
+        "check_model_observatory.py",
     ):
         try:
             py_compile.compile(str(ROOT / rel_path), doraise=True)

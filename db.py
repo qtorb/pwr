@@ -499,6 +499,52 @@ def init_db() -> None:
         ensure_column(conn, "executions_history", "artifact_json_path", "TEXT DEFAULT ''")
         migrate_portable_artifact_paths(conn)
 
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS model_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_app TEXT NOT NULL,
+                project_id INTEGER,
+                task_id INTEGER,
+                workflow TEXT DEFAULT '',
+                task_type TEXT DEFAULT '',
+                agent_role TEXT DEFAULT '',
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                status TEXT NOT NULL,
+                latency_ms INTEGER DEFAULT 0,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                cost_usd REAL DEFAULT 0,
+                quality_rating REAL,
+                converted_to_asset INTEGER DEFAULT 0,
+                reused_later INTEGER DEFAULT 0,
+                metadata_json TEXT DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(project_id) REFERENCES projects(id),
+                FOREIGN KEY(task_id) REFERENCES tasks(id)
+            )
+            """
+        )
+        ensure_column(conn, "model_runs", "source_app", "TEXT DEFAULT ''")
+        ensure_column(conn, "model_runs", "project_id", "INTEGER")
+        ensure_column(conn, "model_runs", "task_id", "INTEGER")
+        ensure_column(conn, "model_runs", "workflow", "TEXT DEFAULT ''")
+        ensure_column(conn, "model_runs", "task_type", "TEXT DEFAULT ''")
+        ensure_column(conn, "model_runs", "agent_role", "TEXT DEFAULT ''")
+        ensure_column(conn, "model_runs", "provider", "TEXT DEFAULT ''")
+        ensure_column(conn, "model_runs", "model", "TEXT DEFAULT ''")
+        ensure_column(conn, "model_runs", "status", "TEXT DEFAULT ''")
+        ensure_column(conn, "model_runs", "latency_ms", "INTEGER DEFAULT 0")
+        ensure_column(conn, "model_runs", "input_tokens", "INTEGER DEFAULT 0")
+        ensure_column(conn, "model_runs", "output_tokens", "INTEGER DEFAULT 0")
+        ensure_column(conn, "model_runs", "cost_usd", "REAL DEFAULT 0")
+        ensure_column(conn, "model_runs", "quality_rating", "REAL")
+        ensure_column(conn, "model_runs", "converted_to_asset", "INTEGER DEFAULT 0")
+        ensure_column(conn, "model_runs", "reused_later", "INTEGER DEFAULT 0")
+        ensure_column(conn, "model_runs", "metadata_json", "TEXT DEFAULT '{}'")
+        ensure_column(conn, "model_runs", "created_at", "TEXT DEFAULT ''")
+
         count = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
         if count == 0:
             created = now_iso()

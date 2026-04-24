@@ -9,6 +9,12 @@ from pydantic import BaseModel, Field
 from db import init_db
 from services.assets import build_asset_reuse_payload, get_asset, get_project_assets, create_asset
 from services.executions import get_execution_history, get_latest_execution_run
+from services.model_observatory import (
+    create_model_run,
+    get_model_run,
+    get_model_run_summary,
+    list_model_runs,
+)
 from services.projects import get_project, get_projects
 from services.tasks import (
     get_project_tasks,
@@ -75,6 +81,26 @@ class CreateAssetRequest(BaseModel):
     source_execution_status: str = ""
 
 
+class CreateModelRunRequest(BaseModel):
+    source_app: str = Field(..., min_length=1)
+    project_id: int | None = None
+    task_id: int | None = None
+    workflow: str = ""
+    task_type: str = ""
+    agent_role: str = ""
+    provider: str = Field(..., min_length=1)
+    model: str = Field(..., min_length=1)
+    status: str = Field(..., min_length=1)
+    latency_ms: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
+    quality_rating: float | None = None
+    converted_to_asset: bool = False
+    reused_later: bool = False
+    metadata_json: dict[str, Any] = Field(default_factory=dict)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
@@ -137,6 +163,77 @@ def home_reentry(limit: int = Query(default=5, ge=1, le=50)) -> dict[str, Any]:
 @app.get("/api/projects")
 def list_projects() -> dict[str, Any]:
     return {"items": [row_to_dict(project) for project in get_projects()]}
+
+
+@app.get("/api/model-runs/summary")
+def model_runs_summary(
+    limit: int = Query(default=100, ge=1, le=500),
+    source_app: str = "",
+    workflow: str = "",
+) -> dict[str, Any]:
+    items = [row_to_dict(row) for row in get_model_run_summary(limit=limit, source_app=source_app, workflow=workflow)]
+    return {
+        "items": items,
+        "total_runs": sum(int(item.get("run_count", 0) or 0) for item in items),
+    }
+
+
+@app.get("/api/model-runs")
+def model_runs(
+    limit: int = Query(default=50, ge=1, le=500),
+    source_app: str = "",
+    provider: str = "",
+    model: str = "",
+    workflow: str = "",
+    task_type: str = "",
+    status: str = "",
+) -> dict[str, Any]:
+    return {
+        "items": [
+            row_to_dict(run)
+            for run in list_model_runs(
+                limit=limit,
+                source_app=source_app,
+                provider=provider,
+                model=model,
+                workflow=workflow,
+                task_type=task_type,
+                status=status,
+            )
+        ]
+    }
+
+
+@app.post("/api/model-runs")
+def model_runs_create(payload: CreateModelRunRequest) -> dict[str, Any]:
+    if payload.project_id is not None:
+        require_project(payload.project_id)
+    if payload.task_id is not None:
+        require_task(payload.task_id)
+
+    run_id = create_model_run(
+        source_app=payload.source_app,
+        project_id=payload.project_id,
+        task_id=payload.task_id,
+        workflow=payload.workflow,
+        task_type=payload.task_type,
+        agent_role=payload.agent_role,
+        provider=payload.provider,
+        model=payload.model,
+        status=payload.status,
+        latency_ms=payload.latency_ms,
+        input_tokens=payload.input_tokens,
+        output_tokens=payload.output_tokens,
+        cost_usd=payload.cost_usd,
+        quality_rating=payload.quality_rating,
+        converted_to_asset=payload.converted_to_asset,
+        reused_later=payload.reused_later,
+        metadata_json=payload.metadata_json,
+    )
+    run = get_model_run(run_id)
+    if not run:
+        raise HTTPException(status_code=500, detail="Model run was created but could not be read back")
+    return row_to_dict(run)
 
 
 @app.get("/api/projects/{project_id}")

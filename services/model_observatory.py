@@ -1,0 +1,169 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+from typing import Optional
+
+from db import get_conn, now_iso
+
+
+def create_model_run(
+    *,
+    source_app: str,
+    project_id: int | None,
+    task_id: int | None,
+    workflow: str,
+    task_type: str,
+    agent_role: str,
+    provider: str,
+    model: str,
+    status: str,
+    latency_ms: int = 0,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cost_usd: float = 0.0,
+    quality_rating: float | None = None,
+    converted_to_asset: bool = False,
+    reused_later: bool = False,
+    metadata_json: Optional[dict] = None,
+) -> int:
+    created_at = now_iso()
+    payload = json.dumps(metadata_json or {}, ensure_ascii=False)
+
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO model_runs (
+                source_app, project_id, task_id, workflow, task_type, agent_role,
+                provider, model, status, latency_ms, input_tokens, output_tokens,
+                cost_usd, quality_rating, converted_to_asset, reused_later,
+                metadata_json, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                source_app.strip(),
+                project_id,
+                task_id,
+                workflow.strip(),
+                task_type.strip(),
+                agent_role.strip(),
+                provider.strip(),
+                model.strip(),
+                status.strip(),
+                int(latency_ms or 0),
+                int(input_tokens or 0),
+                int(output_tokens or 0),
+                float(cost_usd or 0),
+                quality_rating,
+                1 if converted_to_asset else 0,
+                1 if reused_later else 0,
+                payload,
+                created_at,
+            ),
+        )
+        return int(cur.lastrowid)
+
+
+def get_model_run(run_id: int) -> Optional[sqlite3.Row]:
+    with get_conn() as conn:
+        return conn.execute(
+            """
+            SELECT *
+            FROM model_runs
+            WHERE id = ?
+            LIMIT 1
+            """,
+            (run_id,),
+        ).fetchone()
+
+
+def list_model_runs(
+    *,
+    limit: int = 50,
+    source_app: str = "",
+    provider: str = "",
+    model: str = "",
+    workflow: str = "",
+    task_type: str = "",
+    status: str = "",
+) -> list[sqlite3.Row]:
+    where_clauses = ["1 = 1"]
+    params: list = []
+
+    for column, value in (
+        ("source_app", source_app),
+        ("provider", provider),
+        ("model", model),
+        ("workflow", workflow),
+        ("task_type", task_type),
+        ("status", status),
+    ):
+        if str(value or "").strip():
+            where_clauses.append(f"{column} = ?")
+            params.append(str(value).strip())
+
+    params.append(limit)
+    with get_conn() as conn:
+        return conn.execute(
+            f"""
+            SELECT *
+            FROM model_runs
+            WHERE {' AND '.join(where_clauses)}
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+
+
+def get_model_run_summary(
+    *,
+    limit: int = 100,
+    source_app: str = "",
+    workflow: str = "",
+) -> list[sqlite3.Row]:
+    where_clauses = ["1 = 1"]
+    params: list = []
+
+    if str(source_app or "").strip():
+        where_clauses.append("source_app = ?")
+        params.append(str(source_app).strip())
+
+    if str(workflow or "").strip():
+        where_clauses.append("workflow = ?")
+        params.append(str(workflow).strip())
+
+    params.append(limit)
+    with get_conn() as conn:
+        return conn.execute(
+            f"""
+            SELECT
+                provider,
+                model,
+                task_type,
+                COUNT(*) AS run_count,
+                ROUND(AVG(COALESCE(latency_ms, 0)), 2) AS avg_latency_ms,
+                ROUND(AVG(COALESCE(cost_usd, 0)), 6) AS avg_cost_usd,
+                ROUND(AVG(COALESCE(input_tokens, 0)), 2) AS avg_input_tokens,
+                ROUND(AVG(COALESCE(output_tokens, 0)), 2) AS avg_output_tokens,
+                SUM(CASE WHEN LOWER(COALESCE(status, '')) IN ('executed', 'success', 'ok') THEN 1 ELSE 0 END) AS success_count,
+                SUM(CASE WHEN LOWER(COALESCE(status, '')) IN ('failed', 'error') THEN 1 ELSE 0 END) AS failure_count,
+                SUM(COALESCE(converted_to_asset, 0)) AS converted_to_asset_count,
+                SUM(COALESCE(reused_later, 0)) AS reused_later_count
+            FROM model_runs
+            WHERE {' AND '.join(where_clauses)}
+            GROUP BY provider, model, task_type
+            ORDER BY run_count DESC, provider ASC, model ASC, task_type ASC
+            LIMIT ?
+            """,
+            tuple(params),
+        ).fetchall()
+
+
+def delete_model_runs(run_ids: list[int]) -> None:
+    if not run_ids:
+        return
+    placeholders = ", ".join(["?"] * len(run_ids))
+    with get_conn() as conn:
+        conn.execute(f"DELETE FROM model_runs WHERE id IN ({placeholders})", tuple(run_ids))
