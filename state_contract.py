@@ -126,6 +126,107 @@ def task_primary_action_hint(state: str) -> str:
     }[normalized]
 
 
+def task_execution_state(task) -> str:
+    def _value(row, key: str, default=""):
+        try:
+            if hasattr(row, "keys") and key in row.keys():
+                value = row[key]
+                return default if value is None else value
+            if isinstance(row, dict):
+                value = row.get(key, default)
+                return default if value is None else value
+        except Exception:
+            return default
+        return default
+
+    execution_state = normalize_execution_state(_value(task, "execution_status"))
+    status_state = normalize_execution_state(_value(task, "status"))
+    output = str(_value(task, "llm_output") or "").strip()
+
+    if execution_state in {"executed", "preview", "failed", "draft"}:
+        return execution_state
+    if status_state in {"executed", "preview", "failed", "draft"}:
+        return status_state
+    if output and not execution_state:
+        return "executed"
+    return execution_state or status_state or "pending"
+
+
+def task_execution_progress_messages(state: str) -> list[str]:
+    normalized = normalize_execution_state(state) or "pending"
+    return {
+        "failed": [
+            "Revisando el ultimo fallo...",
+            "Preparando un nuevo intento...",
+            "Reintentando con el contexto guardado...",
+        ],
+        "preview": [
+            "Recuperando la propuesta previa...",
+            "Preparando la continuacion...",
+            "Continuando la tarea...",
+        ],
+        "pending": [
+            "Preparando la tarea pendiente...",
+            "Seleccionando el mejor modo...",
+            "Iniciando la ejecucion...",
+        ],
+        "draft": [
+            "Revisando el borrador actual...",
+            "Preparando la primera ejecucion...",
+            "Iniciando la tarea...",
+        ],
+        "executed": [
+            "Recuperando el contexto anterior...",
+            "Preparando una nueva ejecucion...",
+            "Ejecutando de nuevo...",
+        ],
+    }.get(
+        normalized,
+        [
+            "Analizando tu tarea...",
+            "Seleccionando el mejor modo...",
+            "Ejecutando...",
+        ],
+    )
+
+
+def build_followthrough_feedback(from_state: str, to_state: str) -> tuple[str, str]:
+    from_state = normalize_execution_state(from_state) or "pending"
+    to_state = normalize_execution_state(to_state) or "pending"
+
+    if from_state == "failed":
+        if to_state == "executed":
+            return ("success", "Reintento completado. Revisa abajo el resultado actualizado.")
+        if to_state == "preview":
+            return ("info", "El reintento dejo una nueva propuesta previa. Revisa abajo desde que punto continuar.")
+        return ("warning", "El reintento se guardo, pero sigue habiendo un fallo. Revisa abajo el error actualizado.")
+
+    if from_state == "preview":
+        if to_state == "executed":
+            return ("success", "La propuesta previa ya se convirtio en un resultado real. Revisa abajo la salida.")
+        if to_state == "failed":
+            return ("warning", "La continuacion termino en fallo. Revisa abajo el error actualizado.")
+        return ("info", "La propuesta previa se actualizo. Revisa abajo la version actual antes de seguir.")
+
+    if from_state in {"pending", "draft"}:
+        if to_state == "executed":
+            return ("success", "La tarea ya tiene un primer resultado. Revisa abajo la salida generada.")
+        if to_state == "preview":
+            return ("info", "La tarea dejo de estar pendiente y ahora tiene una propuesta previa lista para continuar.")
+        if to_state == "failed":
+            return ("warning", "La tarea se intento ejecutar pero termino en fallo. Revisa abajo el error.")
+        return ("info", "La tarea sigue preparada para ejecutarse.")
+
+    if from_state == "executed":
+        if to_state == "executed":
+            return ("success", "Se genero una nueva ejecucion. Revisa abajo el resultado mas reciente.")
+        if to_state == "failed":
+            return ("warning", "La re-ejecucion termino en fallo. Revisa abajo el error.")
+        return ("info", "La tarea se actualizo. Revisa abajo el nuevo estado.")
+
+    return ("info", "La tarea se actualizo. Revisa abajo el estado y el bloque principal.")
+
+
 def resolve_runtime_execution_state(result_status: str, error_code: Optional[str]) -> str:
     """Map provider/runtime outcome to the persisted task state used by the app."""
     if result_status == "completed":

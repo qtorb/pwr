@@ -12,8 +12,14 @@ ROOT = Path(__file__).resolve().parent
 EXPECTED_PYTHON = (3, 11)
 REQUIRED_FILES = [
     "app_main.py",
+    "db.py",
     "state_contract.py",
     "requirements.txt",
+    "services/__init__.py",
+    "services/projects.py",
+    "services/tasks.py",
+    "services/executions.py",
+    "services/assets.py",
     "router/domain.py",
     "router/providers.py",
     "router/execution_service.py",
@@ -22,6 +28,12 @@ REQUIRED_FILES = [
     ".env.example",
 ]
 EXPECTED_DB = ROOT / "pwr_data" / "pwr.db"
+SERVICE_FILES = [
+    ROOT / "services" / "projects.py",
+    ROOT / "services" / "tasks.py",
+    ROOT / "services" / "executions.py",
+    ROOT / "services" / "assets.py",
+]
 
 
 def ok(message: str) -> None:
@@ -80,13 +92,29 @@ def main() -> int:
         warn("GEMINI_API_KEY is not available in this process; real Gemini smoke remains pending")
         warn("PowerShell: $env:GEMINI_API_KEY = \"your-gemini-key\"")
 
-    for rel_path in ("app_main.py", "state_contract.py"):
+    for rel_path in (
+        "app_main.py",
+        "db.py",
+        "state_contract.py",
+        "services/projects.py",
+        "services/tasks.py",
+        "services/executions.py",
+        "services/assets.py",
+    ):
         try:
             py_compile.compile(str(ROOT / rel_path), doraise=True)
             ok(f"{rel_path} compiles")
         except py_compile.PyCompileError as exc:
             fail(f"{rel_path} does not compile: {exc.msg}")
             failures += 1
+
+    for service_path in SERVICE_FILES:
+        text = service_path.read_text(encoding="utf-8")
+        if "import streamlit" in text or "from streamlit" in text:
+            fail(f"{service_path.relative_to(ROOT)} imports streamlit; services must stay UI-free")
+            failures += 1
+        else:
+            ok(f"{service_path.relative_to(ROOT)} stays streamlit-free")
 
     if EXPECTED_DB.exists():
         ok("pwr_data/pwr.db exists")
