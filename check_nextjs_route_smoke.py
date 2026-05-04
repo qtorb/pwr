@@ -404,13 +404,14 @@ def main() -> int:
             workspace_task["title"] in workspace_detail_html
             and "Resultado guardado." in workspace_detail_html
             and "Resultado manual visible para la workspace." in workspace_detail_html
+            and "Guardar como activo" in workspace_detail_html
             and "Ver en /tasks" in workspace_detail_html
             and "Hint experimental" in workspace_detail_html
             and "mock-racing" in workspace_detail_html
         ):
-            ok("workspace route renders an existing task with manual result")
+            ok("workspace route closes the loop with manual result and save-as-asset action")
         else:
-            fail("workspace route did not show the expected existing task state")
+            fail("workspace route did not show the expected result-to-asset closure state")
             failures += 1
 
         tasks_after_workspace_html = wait_for_http(

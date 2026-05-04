@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import TaskHintFeedback from "../[taskId]/task-hint-feedback";
+import TaskResultActions from "../[taskId]/task-result-actions";
 import { createWorkspaceTaskAction, saveWorkspaceResultAction } from "./actions";
 
 const MODEL_OPTIONS = [
@@ -64,6 +65,9 @@ export default function TaskWorkspaceClient({
   const [resultText, setResultText] = useState(
     String(latestExecution?.output_text || task?.llm_output || ""),
   );
+  const [latestExecutionId, setLatestExecutionId] = useState(
+    latestExecution?.id ? Number(latestExecution.id) : null,
+  );
   const [status, setStatus] = useState(
     String(latestExecution?.execution_status || task?.execution_status || task?.status || "draft"),
   );
@@ -82,6 +86,12 @@ export default function TaskWorkspaceClient({
     projects.find((project) => String(project.id) === String(projectId)) || taskRecord || selectedProject || null;
   const hasProjects = Boolean(projects.length);
   const recommendationTaskType = recommendation?.task_type || task?.task_type || "generic";
+  const normalizedResult = String(resultText || "").trim();
+  const normalizedStatus = String(status || "draft").toLowerCase();
+  const canSaveAsset = ["preview", "executed"].includes(normalizedStatus) && Boolean(normalizedResult);
+  const defaultAssetType = normalizedStatus === "preview" ? "preview" : "output";
+  const resolvedProjectId =
+    Number(taskRecord?.project_id || selectedProject?.id || projectId || 0) || null;
 
   async function ensureTask() {
     if (taskId) return taskId;
@@ -142,6 +152,18 @@ export default function TaskWorkspaceClient({
         resultText: String(resultText || "").trim(),
       });
       setStatus(payload.status || "executed");
+      setLatestExecutionId(payload.execution_id ? Number(payload.execution_id) : null);
+      setTaskRecord((currentTask) =>
+        currentTask
+          ? {
+              ...currentTask,
+              context: String(prompt || "").trim(),
+              llm_output: String(resultText || "").trim(),
+              execution_status: payload.status || "executed",
+              status: payload.status || "executed",
+            }
+          : currentTask,
+      );
       setSavedMessage(payload.message || "Resultado guardado.");
       router.replace(`/tasks/workspace?taskId=${resolvedTaskId}&saved=1`);
       router.refresh();
@@ -295,7 +317,7 @@ export default function TaskWorkspaceClient({
                     {savedMessage}{" "}
                     {taskId ? (
                       <Link href={`/tasks/${taskId}`} className="inline-link">
-                        Abrir resultado y guardar como activo
+                        Ver tarea completa
                       </Link>
                     ) : null}
                   </>
@@ -308,6 +330,29 @@ export default function TaskWorkspaceClient({
             {errorMessage ? <div className="feedback-banner error">{errorMessage}</div> : null}
           </div>
         </div>
+
+        {taskId && resolvedProjectId ? (
+          <div className="panel">
+            <div className="panel-body stack">
+              <div className="band-head">
+                <h2>3. Guardar como activo</h2>
+                <div className="subtle">Cierra el loop de valor sin salir de la workspace</div>
+              </div>
+
+              <TaskResultActions
+                taskId={taskId}
+                projectId={resolvedProjectId}
+                projectHref={`/projects/${resolvedProjectId}`}
+                taskTitle={title || taskRecord?.title || `Tarea ${taskId}`}
+                defaultAssetType={defaultAssetType}
+                resultContent={normalizedResult}
+                sourceExecutionId={latestExecutionId}
+                sourceExecutionStatus={status}
+                canSaveAsset={canSaveAsset}
+              />
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <aside className="workspace-side">
