@@ -27,7 +27,7 @@ export default async function TaskWorkspacePage({ searchParams }) {
           </div>
           <h1>Task Workspace</h1>
           <p>
-            Empieza con titulo y prompt. Cuando tengas la salida, vuelve aqui, pega el resultado y abre la tarea para guardarlo como activo.
+            Empieza con titulo y prompt. Cuando tengas la salida, vuelve aqui, pega el resultado y guardalo como activo sin salir de la workspace.
           </p>
           <div className="subtle">API base actual: {apiBaseUrl}</div>
         </section>
