@@ -14,7 +14,7 @@ export default async function TaskWorkspacePage({ searchParams }) {
 
   return (
     <main className="shell">
-      <AppHeader subtitle="Workspace unificada para mover una tarea sin friccion" statusText="API conectada" statusTone="ok" />
+      <AppHeader subtitle="Workspace diaria para crear, capturar y cerrar tareas" statusText="API conectada" statusTone="ok" />
 
       <div className="page">
         <section className="hero">
@@ -27,8 +27,7 @@ export default async function TaskWorkspacePage({ searchParams }) {
           </div>
           <h1>Task Workspace</h1>
           <p>
-            Carril minimo para definir una tarea, elegir modelo, copiar el prompt, ejecutar fuera de
-            PWR y guardar el resultado sin abrir varias pantallas.
+            Empieza con titulo y prompt. Cuando tengas la salida, vuelve aqui, pega el resultado y abre la tarea para guardarlo como activo.
           </p>
           <div className="subtle">API base actual: {apiBaseUrl}</div>
         </section>

@@ -126,7 +126,7 @@ export default function TaskWorkspaceClient({
     setErrorMessage("");
     setSavedMessage("");
     if (!String(resultText || "").trim()) {
-      setErrorMessage("Pega un resultado antes de guardarlo.");
+      setErrorMessage("Pega un resultado antes de guardarlo. Si aun no tienes salida, copia el prompt y ejecutalo fuera de PWR.");
       return;
     }
 
@@ -158,8 +158,8 @@ export default function TaskWorkspaceClient({
         <div className="panel">
           <div className="panel-body stack">
             <div className="band-head">
-              <h2>Task Workspace</h2>
-              <div className="subtle">Flujo directo para crear, copiar, pegar y guardar</div>
+              <h2>Nueva tarea o tarea en curso</h2>
+              <div className="subtle">Escribe lo minimo, copia el prompt y vuelve para guardar el resultado.</div>
             </div>
 
             {!hasProjects ? (
@@ -222,7 +222,7 @@ export default function TaskWorkspaceClient({
                 type="text"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                placeholder="Que necesitas mover ahora"
+                placeholder="Que necesitas resolver ahora"
               />
             </div>
           </div>
@@ -231,8 +231,8 @@ export default function TaskWorkspaceClient({
         <div className="panel">
           <div className="panel-body stack">
             <div className="band-head">
-              <h2>Prompt</h2>
-              <div className="subtle">Escribe, copia y ejecuta fuera de PWR</div>
+              <h2>1. Preparar prompt</h2>
+              <div className="subtle">Copia el prompt y ejecutalo fuera de PWR.</div>
             </div>
 
             <div className="form-field">
@@ -248,15 +248,15 @@ export default function TaskWorkspaceClient({
 
             <div className="form-actions workspace-inline-actions">
               <button
-                className="secondary-button"
+                className="primary-button"
                 type="button"
                 onClick={handleCopyPrompt}
                 disabled={!hasProjects || pendingAction === "copy" || pendingAction === "save"}
               >
-                {pendingAction === "copy" ? "Copiando..." : "Copiar prompt"}
+                {pendingAction === "copy" ? "Copiando..." : taskId ? "Copiar prompt" : "Crear tarea y copiar prompt"}
               </button>
               <div className="subtle">
-                {copyMessage || "La tarea se crea automaticamente en el primer paso util del flujo."}
+                {copyMessage || "Copiar prompt crea la tarea si aun no existe y mantiene el hilo listo para continuar."}
               </div>
             </div>
           </div>
@@ -265,8 +265,8 @@ export default function TaskWorkspaceClient({
         <div className="panel">
           <div className="panel-body stack">
             <div className="band-head">
-              <h2>Resultado</h2>
-              <div className="subtle">Pega la salida final y guardala en la tarea</div>
+              <h2>2. Capturar resultado</h2>
+              <div className="subtle">Pega la salida final para cerrar la tarea.</div>
             </div>
 
             <div className="form-field">
@@ -276,7 +276,7 @@ export default function TaskWorkspaceClient({
                 rows={16}
                 value={resultText}
                 onChange={(event) => setResultText(event.target.value)}
-                placeholder="Pega aqui el resultado que obtuviste fuera de PWR."
+                placeholder="Pega aqui la salida final que obtuviste fuera de PWR."
               />
             </div>
 
@@ -287,10 +287,21 @@ export default function TaskWorkspaceClient({
                 onClick={handleSaveResult}
                 disabled={!hasProjects || pendingAction === "save" || pendingAction === "copy"}
               >
-                {pendingAction === "save" ? "Guardando..." : "Guardar resultado"}
+                {pendingAction === "save" ? "Guardando..." : "Guardar resultado en tarea"}
               </button>
               <div className="subtle">
-                {savedMessage || "El resultado quedara dentro de la tarea actual y aparecera en /tasks."}
+                {savedMessage ? (
+                  <>
+                    {savedMessage}{" "}
+                    {taskId ? (
+                      <Link href={`/tasks/${taskId}`} className="inline-link">
+                        Abrir resultado y guardar como activo
+                      </Link>
+                    ) : null}
+                  </>
+                ) : (
+                  "El resultado quedara dentro de la tarea actual y aparecera en /tasks."
+                )}
               </div>
             </div>
 
@@ -303,8 +314,8 @@ export default function TaskWorkspaceClient({
         <div className="panel">
           <div className="panel-body stack">
             <div className="band-head">
-              <h2>Contexto actual</h2>
-              <div className="subtle">Lo justo para no perder el hilo</div>
+              <h2>Trabajo actual</h2>
+              <div className="subtle">Lo justo para seguir sin cambiar de pantalla</div>
             </div>
             <div className="info-block">
               <div className="label">Proyecto</div>
